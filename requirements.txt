@@ -1,0 +1,6 @@
+Flask
+pandas  # For reading CSV files
+Flask-CORS
+requests
+python-dotenv
+openpyxl
