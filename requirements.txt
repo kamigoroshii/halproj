@@ -4,3 +4,4 @@ Flask-CORS
 requests
 python-dotenv
 openpyxl
+gunicorn
