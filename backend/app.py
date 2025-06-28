@@ -233,4 +233,4 @@ def send_whatsapp_alert_simulation():
 # --- Running the Flask App ---
 if __name__ == '__main__':
     # No need to create data directory for chat_ids.json anymore
-    app.run(debug=True, port=5000)
+    app.run(port=5000)
