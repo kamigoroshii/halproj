@@ -1,0 +1,22 @@
+# Virtual environment
+venv/
+*.pyc
+__pycache__/
+
+# Environment variables
+.env
+
+# Generated data (do NOT commit these, they are created by transform_data.py)
+data/processed_testers_data.csv
+data/telegram_chat_ids.json # If you ever used the "send to all" feature locally
+
+# Local Python artifacts
+.pytest_cache/
+.mypy_cache/
+
+# Ngrok (if downloaded into project folder)
+ngrok
+
+# Other OS specific files
+.DS_Store
+Thumbs.db

@@ -14,6 +14,16 @@ app = Flask(__name__,
 
 CORS(app)
 
+# --- NEW CODE START ---
+@app.route('/')
+def serve_index():
+    """
+    Serves the main index.html file when accessing the root URL.
+    """
+    return render_template('index.html')
+# --- NEW CODE END ---
+
+
 # --- Configuration (from .env) ---
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID') # Re-added for single chat ID
