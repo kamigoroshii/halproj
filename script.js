@@ -31,7 +31,15 @@ const downloadShortageExcelBtn = document.getElementById('downloadShortageExcelB
 
 // Global state variables
 let currentJigData = null; // Stores summary and details from /api/jig_details
-const API_BASE_URL = 'http://127.0.0.1:5000/api'; // Your Flask backend URL
+
+// ********************************************************************************
+// >>>>> IMPORTANT FIX: Change this API_BASE_URL to your deployed Render URL's API endpoint <<<<<
+// ********************************************************************************
+// You MUST replace 'https://hal-jig-tracker.onrender.com' with your EXACT Render service URL.
+// For example, if your Render URL is 'https://my-awesome-app.onrender.com',
+// then API_BASE_URL should be 'https://my-awesome-app.onrender.com/api'.
+const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; 
+// ********************************************************************************
 
 
 // --- CORE UTILITY FUNCTIONS (MUST BE DEFINED FIRST) ---
@@ -255,7 +263,7 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
         console.error(`Error sending ${platform} alert:`, error);
         showAlert(
             'Network Error',
-            `Could not connect to backend to send ${platform} alert. Please try again.`,
+            `Could not connect to backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`,
             'error'
         );
     } finally {
@@ -281,6 +289,7 @@ async function searchJigDetails() {
     showLoading(true);
 
     try {
+        // This is where the API call is made. It uses the API_BASE_URL.
         const response = await fetch(`${API_BASE_URL}/jig_details/${jigNumberValue}`);
         const data = await response.json();
 
@@ -315,7 +324,7 @@ async function searchJigDetails() {
         showLoading(false);
         showAlert(
             'Network Error',
-            'Could not connect to the backend server. Please ensure the server is running.',
+            `Could not connect to the backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`,
             'error'
         );
         currentJigData = null;
