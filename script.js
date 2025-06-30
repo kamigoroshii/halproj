@@ -415,21 +415,36 @@ async function showShortageListModal() {
                 }
                 row.className = rowClass;
 
+                // --- FIX STARTS HERE ---
                 let actionRequiredText = 'N/A';
-                if (part.availabilityStatus === "Shortage") {
-                    actionRequiredText = `Missing ${part.requiredQuantity - part.currentStock} units.`;
-                } else if (part.availabilityStatus === "Critical Shortage") {
+                const required = Number(part.requiredQuantity); // Ensure it's a number
+                const current = Number(part.currentStock);   // Ensure it's a number
+                const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : ''; // Ensure string and trim spaces
+
+                if (status === "Shortage") {
+                    if (!isNaN(required) && !isNaN(current)) {
+                        actionRequiredText = `Missing ${required - current} units.`;
+                    } else {
+                        actionRequiredText = 'Missing quantity (data error).';
+                    }
+                } else if (status === "Critical Shortage") {
                     actionRequiredText = 'Immediate action: ZERO stock!';
-                } else if (part.availabilityStatus === "Surplus") {
-                    actionRequiredText = `Surplus of ${part.currentStock - part.requiredQuantity} units.`;
-                } else if (part.availabilityStatus === "Adequate") {
+                } else if (status === "Surplus") {
+                    if (!isNaN(required) && !isNaN(current)) {
+                        actionRequiredText = `Surplus of ${current - required} units.`;
+                    } else {
+                        actionRequiredText = 'Surplus quantity (data error).';
+                    }
+                } else if (status === "Adequate") {
                     actionRequiredText = 'NILL';
                 }
+                // --- FIX ENDS HERE ---
 
                 row.innerHTML = `
                     <td>${part.part_number || '--'}</td>
                     <td>${part.unitName || '--'}</td>
-                    <td>${part.sale_order || '--'}</td> <td>${part.requiredQuantity !== undefined ? part.requiredQuantity : '--'}</td>
+                    <td>${part.sale_order || '--'}</td>
+                    <td>${part.requiredQuantity !== undefined ? part.requiredQuantity : '--'}</td>
                     <td>${part.currentStock !== undefined ? part.currentStock : '--'}</td>
                     <td><span class="status-badge status-${availabilityStatusCleaned}">${part.availabilityStatus || 'N/A'}</span></td>
                     <td>${actionRequiredText}</td>
@@ -553,7 +568,7 @@ setInterval(() => {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts'
+            version: '2.0-all-parts-fix' // Updated version for auto-save
         };
         localStorage.setItem('hal_current_session', JSON.stringify(sessionData));
         console.log('Session auto-saved:', sessionData.jigNumber);
@@ -594,7 +609,7 @@ window.HALTrackingSystem = {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts'
+            version: '2.0-all-parts-fix'
         };
     }
 };
