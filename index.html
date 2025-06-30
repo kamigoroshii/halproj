@@ -43,7 +43,7 @@
                         </div>
                         <div class="header-text">
                             <h3>Tester Identification</h3>
-                            <p>Enter the unique Tester Jig Number to retrieve its status.</p>
+                            <p>Enter the unique Tester Jig Number to retrieve its associated Sale Orders.</p>
                         </div>
                     </div>
                     <div class="card-body">
@@ -91,8 +91,8 @@
                                     <i class="fas fa-file-invoice"></i>
                                 </div>
                                 <div class="info-content">
-                                    <label>Sale Order</label>
-                                    <span id="displaySaleOrder">--</span>
+                                    <label>Sale Orders</label>
+                                    <div id="displaySaleOrders"><span>--</span></div>
                                 </div>
                             </div>
                             <div class="info-card">
@@ -135,33 +135,39 @@
                 <div class="modal-icon">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <h3 id="shortageModalTitle">Shortage & Availability List</h3>
+                <h3 id="shortageModalTitle">Select Sale Order</h3>
                 <button id="closeShortageModal" class="close-btn">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="modal-body-scrollable">
-                <p class="text-neutral-300 mb-4">Detailed availability status for all components of this Tester Jig:</p>
-                <div class="shortage-table-container">
-                    <table class="shortage-table">
-                        <thead>
-                            <tr>
-                                <th>PART NO</th>
-                                <th>DESC</th>
-                                <th>Required Qty</th>
-                                <th>Current Stock</th>
-                                <th>Availability Status</th>
-                                <th>Action Required</th>
-                            </tr>
-                        </thead>
-                        <tbody id="shortageTableBody">
-                            </tbody>
-                    </table>
+            <div class="modal-body">
+                <p class="text-neutral-300 mb-4" id="selectSoInstruction">Please select a Sale Order to view its shortage list:</p>
+                <div id="saleOrderSelection" class="flex flex-col gap-2 p-4 border border-neutral-600 rounded-lg mb-4">
+                    </div>
+
+                <div id="specificShortageList" class="hidden">
+                    <h4 class="mb-2 text-neutral-100 font-semibold">Shortage & Availability List for Sale Order: <span id="selectedSaleOrder" class="text-accent-orange"></span></h4>
+                    <div class="shortage-table-container">
+                        <table class="shortage-table">
+                            <thead>
+                                <tr>
+                                    <th>PART NO</th>
+                                    <th>DESC</th>
+                                    <th>Required Qty</th>
+                                    <th>Current Stock</th>
+                                    <th>Availability Status</th>
+                                    <th>Action Required</th>
+                                </tr>
+                            </thead>
+                            <tbody id="specificShortageTableBody">
+                                </tbody>
+                        </table>
+                    </div>
+                    <p id="noSpecificShortageMessage" class="hidden text-center text-green-400 mt-4 font-semibold">No critical shortages found across all items for this Sale Order.</p>
                 </div>
-                <p id="noShortageMessage" class="hidden text-center text-green-400 mt-4 font-semibold">No critical shortages found across all items.</p>
             </div>
             <div class="modal-actions">
-                <button id="downloadShortageExcelBtn" class="btn btn-primary">
+                <button id="downloadSpecificShortageExcelBtn" class="btn btn-primary hidden">
                     <i class="fas fa-download"></i>
                     <span>Download as Excel</span>
                 </button>

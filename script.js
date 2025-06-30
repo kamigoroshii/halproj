@@ -1,10 +1,10 @@
-// DOM Elements (Defined at the top for easy access)
+// DOM Elements
 const jigNumberInput = document.getElementById('jigNumberInput');
 const searchJigBtn = document.getElementById('searchJigBtn');
 
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
-const displaySaleOrder = document.getElementById('displaySaleOrder');
+const displaySaleOrders = document.getElementById('displaySaleOrders'); // New element for multiple Sale Orders
 const displayTopAssyNo = document.getElementById('displayTopAssyNo');
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
@@ -12,9 +12,15 @@ const shortageListBtn = document.getElementById('shortageListBtn');
 
 const shortageListModal = document.getElementById('shortageListModal');
 const closeShortageModalBtn = document.getElementById('closeShortageModal');
-const shortageModalOkBtn = document.getElementById('shortageModalOk');
-const shortageTableBody = document.getElementById('shortageTableBody');
-const noShortageMessage = document.getElementById('noShortageMessage');
+const shortageModalOkBtn = document.getElementById('shortageModalOk'); // This button will have dynamic behavior
+
+const selectSoInstruction = document.getElementById('selectSoInstruction'); // New element for instruction text
+const saleOrderSelectionDiv = document.getElementById('saleOrderSelection'); // Container for Sale Order radio buttons
+
+const specificShortageListDiv = document.getElementById('specificShortageList'); // Section to show the actual shortage table
+const selectedSaleOrderSpan = document.getElementById('selectedSaleOrder'); // Span to display selected SO
+const specificShortageTableBody = document.getElementById('specificShortageTableBody'); // Table body for specific SO
+const noSpecificShortageMessage = document.getElementById('noSpecificShortageMessage'); // Message for no shortages in specific SO
 
 const alertModal = document.getElementById('alertModal');
 const closeModalBtn = document.getElementById('closeModal');
@@ -22,26 +28,26 @@ const modalOkBtn = document.getElementById('modalOk');
 const sendAlertPlatformBtn = document.getElementById('sendAlertPlatformBtn');
 const loadingSpinner = document.getElementById('loadingSpinner');
 
-// NEW: Download as Excel button reference
-const downloadShortageExcelBtn = document.getElementById('downloadShortageExcelBtn');
+// NEW: Download as Excel button reference (specific to selected SO)
+const downloadSpecificShortageExcelBtn = document.getElementById('downloadSpecificShortageExcelBtn');
 
 
 // Global state variables
-let currentJigData = null; // Stores summary and details from /api/jig_details
+let currentTesterId = null; // Stores the Tester Jig Number from search
+let currentSaleOrders = []; // Stores the list of Sale Orders for currentTesterId
+
 
 // IMPORTANT: This URL MUST point to your deployed Render backend.
 const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; // Make sure this is your actual Render URL + /api
 
 
-// --- CORE UTILITY FUNCTIONS (MUST BE DEFINED FIRST) ---
+// --- CORE UTILITY FUNCTIONS ---
 
-// Displays alerts in a modal
 function showAlert(title, message, type) {
     document.getElementById('modalTitle').textContent = title;
     document.getElementById('modalMessage').textContent = message;
-    sendAlertPlatformBtn.classList.add('hidden'); // Hide by default within showAlert
+    sendAlertPlatformBtn.classList.add('hidden');
     alertModal.classList.remove('hidden');
-    // Add entrance animation
     const modalContent = alertModal.querySelector('.modal-content');
     modalContent.style.transform = 'scale(0.8) translateY(-50px)';
     modalContent.style.opacity = '0';
@@ -52,7 +58,6 @@ function showAlert(title, message, type) {
     });
 }
 
-// Closes the general alert modal
 function closeModalFunction() {
     const modalContent = alertModal.querySelector('.modal-content');
     modalContent.style.transform = 'scale(0.8) translateY(-50px)';
@@ -65,7 +70,6 @@ function closeModalFunction() {
     }, 300);
 }
 
-// Shows/hides the loading spinner
 function showLoading(show) {
     if (show) {
         loadingSpinner.classList.remove('hidden');
@@ -90,7 +94,6 @@ function showLoading(show) {
     }
 }
 
-// Resets sections to initial state (hides details, modals)
 function resetSections(clearInput = true) {
     jigDetailsDisplaySection.classList.add('hidden');
     shortageListModal.classList.add('hidden');
@@ -98,8 +101,15 @@ function resetSections(clearInput = true) {
     if (clearInput) {
         jigNumberInput.value = '';
     }
-    currentJigData = null; // Clear current jig data
-    // Reset styles to allow re-animation
+    currentTesterId = null;
+    currentSaleOrders = []; // Clear Sale Orders
+    // Reset modal states
+    saleOrderSelectionDiv.classList.remove('hidden');
+    selectSoInstruction.classList.remove('hidden');
+    specificShortageListDiv.classList.add('hidden');
+    document.getElementById('shortageModalTitle').textContent = 'Select Sale Order'; // Reset modal title
+    downloadSpecificShortageExcelBtn.classList.add('hidden'); // Hide download button initially
+    
     [jigDetailsDisplaySection, shortageListModal, alertModal].forEach(section => {
         section.style.opacity = '';
         section.style.transform = '';
@@ -107,15 +117,13 @@ function resetSections(clearInput = true) {
     });
 }
 
-// Clears form and resets sections
 function clearForm() {
-    resetSections(true); // Clear input
+    resetSections(true);
     jigNumberInput.focus();
     jigNumberInput.style.transform = 'scale(0.95)';
     setTimeout(() => { jigNumberInput.style.transform = ''; }, 150);
 }
 
-// Creates particle effect for buttons
 function createParticleEffect(element) {
     const rect = element.getBoundingClientRect();
     for (let i = 0; i < 6; i++) {
@@ -147,29 +155,21 @@ function createParticleEffect(element) {
     }
 }
 
-
-// Generic Send Alert Function (handles Telegram, Email is removed, WhatsApp simulation)
 async function sendAlert(platform, alertDataObject, contextDescription) {
-    // Determine the ID to use in the alert message
-    const idForAlert = alertDataObject.testerJigNumber || alertDataObject.partNumber || alertDataObject.testerId || 'N/A';
+    const idForAlert = alertDataObject.testerJigNumber || 'N/A';
     if (idForAlert === 'N/A') {
-        console.error('sendAlert: Missing alertDataObject or its identifier (testerJigNumber/partNumber/testerId).');
-        showAlert('Error', 'Cannot send alert: Jig/Part ID is missing.', 'error');
+        console.error('sendAlert: Missing alertDataObject or its identifier (testerJigNumber).');
+        showAlert('Error', 'Cannot send alert: Tester Jig ID is missing.', 'error');
         return;
     }
 
-    // SIMPLIFIED MESSAGE LOGIC
     let alertMessage = `🚨 HAL Alert: ${contextDescription}\n` +
                        `Tester Jig ID: ${idForAlert}`;
-
-    // The rest of the alertDataObject properties (unitName, quantities, etc.) are NOT used in this simplified message.
 
     let endpoint = '';
     let successMessage = '';
     let errorMessage = '';
-    let subject = `HAL Alert: ${contextDescription} - ${idForAlert}`; // Subject remains for conceptual email, but email is removed.
 
-    // Update the button in the general alert modal while sending
     sendAlertPlatformBtn.classList.remove('hidden');
     sendAlertPlatformBtn.disabled = true;
 
@@ -178,42 +178,33 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
         successMessage = 'Telegram alert sent successfully!';
         errorMessage = 'Failed to send Telegram alert.';
         sendAlertPlatformBtn.innerHTML = '<i class="fab fa-telegram-plane"></i> <span>Sending Telegram...</span>';
-    } else if (platform === 'email') { // Email functionality removed from frontend
-        console.warn('Email alerts are disabled in frontend.');
-        sendAlertPlatformBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Email Disabled</span>';
-        sendAlertPlatformBtn.disabled = false;
-        showAlert('Email Disabled', 'Email alerts are currently disabled in the system configuration.', 'warning');
-        return;
     } else if (platform === 'whatsapp_simulation') {
         endpoint = `${API_BASE_URL}/send_whatsapp_alert`;
         successMessage = 'WhatsApp alert simulation successful!';
         errorMessage = 'Failed to send WhatsApp simulation.';
         sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Sending WhatsApp...</span>';
 
-        // For WhatsApp simulation, still need original incharge if available for print
-        const officialInchargeForAlert = alertDataObject.officialIncharge || 'N/A';
+        const officialInchargeForAlert = alertDataObject.officialIncharge || 'N/A'; // For WhatsApp, we need an incharge
         if (!officialInchargeForAlert || officialInchargeForAlert === 'N/A') {
              showAlert('Error', 'Cannot send WhatsApp alert: Official Incharge number is missing/invalid.', 'error');
-             sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Send Alert</span>'; // Revert button
+             sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Send Alert</span>';
              sendAlertPlatformBtn.disabled = false;
              return;
         }
-        // Add specific data for WhatsApp simulation backend, even if not in message content
+        // Specific payload for WhatsApp simulation
         const whatsappPayloadData = {
-            testerId: alertDataObject.testerId || 'N/A',
+            testerId: alertDataObject.testerId || idForAlert, // Use part's testerId if available, else jig ID
             officialIncharge: officialInchargeForAlert,
             message: alertMessage // Send the simplified message content
         };
-        
+
         try {
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(whatsappPayloadData)
             });
-
             const data = await response.json();
-
             if (response.ok) {
                 showAlert('Alert Notification Dispatched', successMessage, 'success');
             } else {
@@ -221,17 +212,13 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
             }
         } catch (error) {
             console.error(`Error sending ${platform} alert:`, error);
-            showAlert(
-                'Network Error',
-                `Could not connect to backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`,
-                'error'
-            );
+            showAlert('Network Error', `Could not connect to backend for WhatsApp simulation at ${API_BASE_URL}.`, 'error');
         } finally {
             sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Send Alert</span>';
             sendAlertPlatformBtn.classList.add('hidden');
             sendAlertPlatformBtn.disabled = false;
         }
-        return; // Exit here for WhatsApp simulation as it has custom try/catch
+        return;
     } else {
         showAlert('Error', 'Unsupported alert platform specified.', 'error');
         sendAlertPlatformBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Error</span>';
@@ -240,16 +227,14 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
     }
 
     try {
-        const payload = { message: alertMessage }; // Simplified payload for Telegram
+        const payload = { message: alertMessage };
 
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
         const data = await response.json();
-
         if (response.ok) {
             showAlert('Alert Notification Dispatched', successMessage, 'success');
         } else {
@@ -257,14 +242,10 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
         }
     } catch (error) {
         console.error(`Error sending ${platform} alert:`, error);
-        showAlert(
-            'Network Error',
-            `Could not connect to backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`,
-            'error'
-        );
+        showAlert('Network Error', `Could not connect to backend server at ${API_BASE_URL}.`, 'error');
     } finally {
-        sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Send Alert</span>'; // Reset to generic "Send Alert"
-        sendAlertPlatformBtn.classList.add('hidden'); // Hide it again by default after sending
+        sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Send Alert</span>';
+        sendAlertPlatformBtn.classList.add('hidden');
         sendAlertPlatformBtn.disabled = false;
     }
 }
@@ -272,228 +253,291 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
 
 // --- MAIN LOGIC FUNCTIONS ---
 
-// Main search function for Tester Jig Number
 async function searchJigDetails() {
     const jigNumberValue = jigNumberInput.value.trim();
-
     if (!jigNumberValue) {
         showAlert('Input Required', 'Please enter a Tester Jig Number to search.', 'warning');
         return;
     }
 
-    resetSections(false); // Reset all sections except the input itself
+    resetSections(false);
     showLoading(true);
+    currentTesterId = jigNumberValue; // Store the current Tester ID
 
     try {
         const response = await fetch(`${API_BASE_URL}/jig_details/${jigNumberValue}`);
         const data = await response.json();
-
         showLoading(false);
 
         if (response.ok) {
-            currentJigData = data; // Store both summary and details
+            const jigSummary = data.summary;
+            const saleOrders = data.saleOrders || []; // Ensure it's an array
 
-            // NEW LOGIC: Automatically determine launching status
-            const hasInsufficientParts = currentJigData.details.some(part =>
-                part.availabilityStatus === "Shortage" || part.availabilityStatus === "Critical Shortage"
-            );
+            currentSaleOrders = saleOrders; // Store the list of Sale Orders
 
-            const isLaunched = !hasInsufficientParts; // If no insufficient parts, it's launched
+            displayJigSummary(jigSummary, currentSaleOrders);
+            jigDetailsDisplaySection.classList.remove('hidden');
+            jigDetailsDisplaySection.classList.add('fade-in');
 
-            displayJigSummary(currentJigData.summary); // Display basic summary first
+            // Now, automatically determine launching status by checking all sale orders
+            let isOverallLaunched = true;
+            let firstShortageSaleOrder = null;
 
-            // Update the launching status display based on automatic detection
-            const newStatusText = isLaunched ? 'Yes' : 'No';
-            const newStatusClass = `status-badge ${isLaunched ? 'status-delivered' : 'status-pending'}`;
+            for (const so of currentSaleOrders) {
+                // Fetch details for each SO to check for shortages
+                const soResponse = await fetch(`${API_BASE_URL}/shortage_list/${jigNumberValue}/${so}`);
+                const soParts = await soResponse.json();
+
+                if (soResponse.ok && Array.isArray(soParts)) {
+                    const hasInsufficientPartsInSO = soParts.some(part =>
+                        part.availabilityStatus === "Shortage" || part.availabilityStatus === "Critical Shortage"
+                    );
+                    if (hasInsufficientPartsInSO) {
+                        isOverallLaunched = false;
+                        firstShortageSaleOrder = so; // Store the first SO with shortage
+                        break; // Found a shortage, no need to check further SOs
+                    }
+                } else {
+                    console.warn(`Could not fetch details for Sale Order ${so} of ${jigNumberValue}. Assuming launched for this SO.`);
+                }
+            }
+
+            const newStatusText = isOverallLaunched ? 'Yes' : 'No';
+            const newStatusClass = `status-badge ${isOverallLaunched ? 'status-delivered' : 'status-pending'}`;
             displayLaunchingStatus.textContent = newStatusText;
             displayLaunchingStatus.className = newStatusClass;
 
-            jigDetailsDisplaySection.classList.remove('hidden'); // Show the jig details section
-            jigDetailsDisplaySection.classList.add('fade-in');
-
-            // NEW LOGIC: Send Telegram alert if automatically detected as NOT Launched
-            if (!isLaunched) {
-                // Simplified context for the Telegram message
-                sendAlert('telegram', currentJigData.summary, "Tester detected as NOT launched (Part Shortage)");
+            if (!isOverallLaunched) {
+                sendAlert('telegram', jigSummary, `Tester detected as NOT launched (Shortage in SO: ${firstShortageSaleOrder})`);
             } else {
-                showAlert('Launching Confirmed', `Tester Jig Number ${currentJigData.summary.testerJigNumber} has all required parts and is considered Launched.`, 'success');
+                showAlert('Launching Confirmed', `Tester Jig Number ${jigSummary.testerJigNumber} has all required parts across all Sale Orders and is considered Launched.`, 'success');
             }
 
         } else {
-            currentJigData = null;
-            displayJigSummary({ // Display 'Not Found' state
-                testerJigNumber: jigNumberValue,
-                saleOrder: 'N/A',
-                topAssyNo: 'N/A',
-                launchingStatus: '--' // Initial state for user input
-            });
-            displayLaunchingStatus.textContent = 'Not Found'; // Set explicit status for not found
+            currentTesterId = null;
+            currentSaleOrders = [];
+            displayJigSummary({ testerJigNumber: jigNumberValue, topAssyNo: 'N/A' }, []);
+            displayLaunchingStatus.textContent = 'Not Found';
             displayLaunchingStatus.className = 'status-badge status-unknown';
-            jigDetailsDisplaySection.classList.remove('hidden'); // Still show section with 'Not Found'
-            showAlert(
-                'Jig Not Found',
-                `No details found for Tester Jig Number: ${jigNumberValue}. Please verify the number.`,
-                'warning'
-            );
+            jigDetailsDisplaySection.classList.remove('hidden');
+            showAlert('Jig Not Found', `No details found for Tester Jig Number: ${jigNumberValue}. Please verify the number.`, 'warning');
         }
     } catch (error) {
         console.error('Error fetching jig details:', error);
         showLoading(false);
-        showAlert(
-            'Network Error',
-            `Could not connect to the backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`,
-            'error'
-        );
-        currentJigData = null;
-        displayJigSummary({ // Display error state
-            testerJigNumber: jigNumberValue,
-            saleOrder: 'Error',
-            topAssyNo: 'Error',
-            launchingStatus: 'Error'
-        });
+        showAlert('Network Error', `Could not connect to the backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`, 'error');
+        currentTesterId = null;
+        currentSaleOrders = [];
+        displayJigSummary({ testerJigNumber: jigNumberValue, topAssyNo: 'Error' }, []);
         displayLaunchingStatus.textContent = 'Error';
-        displayLaunchingStatus.className = 'status-badge status-pending'; // Indicate error visually
+        displayLaunchingStatus.className = 'status-badge status-pending';
         jigDetailsDisplaySection.classList.remove('hidden');
     }
 }
 
-// Displays the summary details of the jig
-function displayJigSummary(summary) {
+
+function displayJigSummary(summary, saleOrders) {
     displayJigNumber.textContent = summary.testerJigNumber;
-    displaySaleOrder.textContent = summary.saleOrder;
     displayTopAssyNo.textContent = summary.topAssyNo;
+
+    displaySaleOrders.innerHTML = ''; // Clear previous content
+    if (saleOrders && saleOrders.length > 0) {
+        const ul = document.createElement('ul');
+        ul.className = 'list-disc list-inside space-y-1'; // Basic styling for readability
+        saleOrders.forEach(so => {
+            const li = document.createElement('li');
+            li.textContent = so;
+            ul.appendChild(li);
+        });
+        displaySaleOrders.appendChild(ul);
+    } else {
+        const span = document.createElement('span');
+        span.textContent = 'N/A';
+        displaySaleOrders.appendChild(span);
+    }
     displayLaunchingStatus.textContent = '--';
     displayLaunchingStatus.className = 'status-badge status-unknown';
 }
 
 
-// Shows the shortage list modal with parts for the current jig
 async function showShortageListModal() {
-    if (!currentJigData || !currentJigData.details || currentJigData.details.length === 0) {
-        showAlert('No Jig Data', 'Please search for a Tester Jig Number first to view the shortage list.', 'warning');
+    if (!currentTesterId || currentSaleOrders.length === 0) {
+        showAlert('No Tester Selected', 'Please search for a Tester Jig Number first, and ensure it has associated Sale Orders.', 'warning');
         return;
     }
 
-    shortageTableBody.innerHTML = ''; // Clear previous entries
-    let hasActualShortages = false; // Flag to determine if any "Shortage" or "Critical Shortage" exists
-
-    // Sort parts to show critical/shortage first
-    const sortedParts = [...currentJigData.details].sort((a, b) => {
-        const statusOrder = { "Critical Shortage": 1, "Shortage": 2, "Pending": 3, "Adequate": 4, "Surplus": 5, "N/A": 6, "Unknown": 7 };
-        return statusOrder[a.availabilityStatus] - statusOrder[b.availabilityStatus];
-    });
-
-    sortedParts.forEach(part => {
-        if (part.availabilityStatus === "Critical Shortage" || part.availabilityStatus === "Shortage" || part.availabilityStatus === "Surplus") {
-            hasActualShortages = true;
-        }
-
-        const row = document.createElement('tr');
-        let rowClass = '';
-        const availabilityStatusCleaned = part.availabilityStatus ? part.availabilityStatus.toLowerCase().replace(/ /g, '_') : 'n_a';
-
-        if (availabilityStatusCleaned === "critical_shortage") {
-            rowClass = 'critical-shortage-row';
-        } else if (availabilityStatusCleaned === "shortage") {
-            rowClass = 'shortage-row';
-        } else if (availabilityStatusCleaned === "surplus") {
-            rowClass = 'surplus-row';
-        }
-        row.className = rowClass;
-
-        let actionRequiredText = 'N/A';
-        if (part.availabilityStatus === "Shortage") {
-            actionRequiredText = `Missing ${part.requiredQuantity - part.currentStock} units.`;
-        } else if (part.availabilityStatus === "Critical Shortage") {
-            actionRequiredText = 'Immediate action: ZERO stock!';
-        } else if (part.availabilityStatus === "Surplus") {
-            actionRequiredText = `Surplus of ${part.currentStock - part.requiredQuantity} units.`;
-        } else if (part.availabilityStatus === "Adequate") {
-            actionRequiredText = 'NILL';
-        }
-
-        row.innerHTML = `
-            <td>${part.testerId || '--'}</td>
-            <td>${part.unitName || '--'}</td>
-            <td>${part.requiredQuantity !== undefined ? part.requiredQuantity : '--'}</td>
-            <td>${part.currentStock !== undefined ? part.currentStock : '--'}</td>
-            <td><span class="status-badge status-${availabilityStatusCleaned}">${part.availabilityStatus || 'N/A'}</span></td>
-            <td>${actionRequiredText}</td>
-        `;
-        shortageTableBody.appendChild(row);
-    });
-
-    if (hasActualShortages) {
-        noShortageMessage.classList.add('hidden');
-        // No Telegram alert here as per new requirements
-        showAlert(
-            'Shortages/Surpluses Detected',
-            `Shortages or surpluses found for Tester Jig Number: ${currentJigData.summary.testerJigNumber}. View details below.`,
-            'alert'
-        );
-    } else {
-        noShortageMessage.classList.remove('hidden');
-        noShortageMessage.textContent = 'All components have adequate stock for this Tester Jig.';
-        showAlert('No Shortages', 'All components have adequate stock for this Tester Jig.', 'success');
-    }
+    saleOrderSelectionDiv.innerHTML = ''; // Clear previous options
+    specificShortageListDiv.classList.add('hidden'); // Hide the table section initially
+    downloadSpecificShortageExcelBtn.classList.add('hidden'); // Hide download button
 
     shortageListModal.classList.remove('hidden');
     shortageListModal.classList.add('fade-in');
+    document.getElementById('shortageModalTitle').textContent = 'Select Sale Order';
+    selectSoInstruction.classList.remove('hidden'); // Ensure instruction is visible
+    saleOrderSelectionDiv.classList.remove('hidden'); // Ensure selection div is visible
+
+
+    currentSaleOrders.forEach(saleOrder => {
+        const wrapperDiv = document.createElement('div');
+        wrapperDiv.className = 'flex items-center'; // For better alignment of radio button and label
+
+        const radioBtn = document.createElement('input');
+        radioBtn.type = 'radio';
+        radioBtn.name = 'selectedSaleOrder'; // All radios in this group
+        radioBtn.value = saleOrder;
+        radioBtn.id = `so-${saleOrder}`;
+        radioBtn.classList.add('form-radio', 'h-4', 'w-4', 'text-blue-600', 'focus:ring-blue-500', 'mr-2'); // Tailwind/custom styling
+
+        const label = document.createElement('label');
+        label.textContent = saleOrder;
+        label.htmlFor = `so-${saleOrder}`;
+        label.classList.add('text-neutral-200', 'font-medium', 'cursor-pointer');
+
+        wrapperDiv.appendChild(radioBtn);
+        wrapperDiv.appendChild(label);
+        saleOrderSelectionDiv.appendChild(wrapperDiv);
+    });
+
+    // Change the OK button to trigger the fetch of the specific shortage list
+    shortageModalOkBtn.onclick = async () => {
+        const selectedRadio = document.querySelector('input[name="selectedSaleOrder"]:checked');
+        if (selectedRadio) {
+            const saleOrderValue = selectedRadio.value;
+            selectedSaleOrderSpan.textContent = saleOrderValue; // Update the span
+            await fetchSpecificShortageList(currentTesterId, saleOrderValue);
+
+            document.getElementById('shortageModalTitle').textContent = 'Shortage & Availability List';
+            selectSoInstruction.classList.add('hidden'); // Hide instruction
+            saleOrderSelectionDiv.classList.add('hidden'); // Hide selection radios
+            specificShortageListDiv.classList.remove('hidden'); // Show the table
+            downloadSpecificShortageExcelBtn.classList.remove('hidden'); // Show download button
+        } else {
+            showAlert('Selection Required', 'Please select a Sale Order from the list.', 'warning');
+        }
+    };
 }
 
-// Hides the shortage list modal
+
+async function fetchSpecificShortageList(testerId, saleOrder) {
+    specificShortageTableBody.innerHTML = '';
+    noSpecificShortageMessage.classList.add('hidden');
+    showLoading(true);
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/shortage_list/${testerId}/${saleOrder}`);
+        const data = await response.json(); // This 'data' is the list of parts for the specific SO
+        showLoading(false);
+
+        if (response.ok && Array.isArray(data) && data.length > 0) {
+            data.forEach(part => {
+                const row = document.createElement('tr');
+                const availabilityStatusCleaned = part.availabilityStatus ? part.availabilityStatus.toLowerCase().replace(/ /g, '_') : 'n_a';
+                let rowClass = '';
+                if (availabilityStatusCleaned === "critical_shortage") rowClass = 'critical-shortage-row';
+                else if (availabilityStatusCleaned === "shortage") rowClass = 'shortage-row';
+                else if (availabilityStatusCleaned === "surplus") rowClass = 'surplus-row';
+                row.className = rowClass;
+
+                let actionRequiredText = 'N/A';
+                if (part.availabilityStatus === "Shortage") actionRequiredText = `Missing ${part.requiredQuantity - part.currentStock} units.`;
+                else if (part.availabilityStatus === "Critical Shortage") actionRequiredText = 'Immediate action: ZERO stock!';
+                else if (part.availabilityStatus === "Surplus") actionRequiredText = `Surplus of ${part.currentStock - part.requiredQuantity} units.`;
+                else if (part.availabilityStatus === "Adequate") actionRequiredText = 'NILL'; // As per previous request
+
+                row.innerHTML = `
+                    <td>${part.part_number || '--'}</td> <td>${part.unitName || '--'}</td>
+                    <td>${part.requiredQuantity !== undefined ? part.requiredQuantity : '--'}</td>
+                    <td>${part.currentStock !== undefined ? part.currentStock : '--'}</td>
+                    <td><span class="status-badge status-${availabilityStatusCleaned}">${part.availabilityStatus || 'N/A'}</span></td>
+                    <td>${actionRequiredText}</td>
+                `;
+                specificShortageTableBody.appendChild(row);
+            });
+            noSpecificShortageMessage.classList.add('hidden');
+        } else {
+            noSpecificShortageMessage.classList.remove('hidden');
+            noSpecificShortageMessage.textContent = `No parts or shortages found for Sale Order: ${saleOrder}`;
+            specificShortageTableBody.innerHTML = ''; // Clear table body if no data
+        }
+    } catch (error) {
+        console.error('Error fetching specific shortage list:', error);
+        showLoading(false);
+        showAlert('Error', 'Failed to fetch shortage list for the selected Sale Order.', 'error');
+        specificShortageTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger-red">Error loading data.</td></tr>';
+    }
+}
+
+// Ensure the OK button in the shortage modal closes the modal when the table is displayed
+function setOkButtonToCloseModal() {
+    shortageModalOkBtn.onclick = hideShortageListModal;
+}
+
+
 function hideShortageListModal() {
     shortageListModal.classList.add('hidden');
+    // Reset modal state for next time it's opened
+    saleOrderSelectionDiv.classList.remove('hidden');
+    selectSoInstruction.classList.remove('hidden');
+    specificShortageListDiv.classList.add('hidden');
+    downloadSpecificShortageExcelBtn.classList.add('hidden'); // Hide download button
+    document.getElementById('shortageModalTitle').textContent = 'Select Sale Order';
+    shortageModalOkBtn.onclick = setOkButtonToProcessSelection; // Reset OK button behavior to handle selection
 }
 
-
-// Handles the click on send alert button in the general alert modal.
-async function handleSendAlertPlatformClick() {
-    if (currentJigData && currentJigData.details && currentJigData.details.length > 0) {
-        const firstPart = currentJigData.details[0]; // Take the first part as a representative
-        // Simplified context for manual WhatsApp alert
-        sendAlert('whatsapp_simulation', firstPart, "Manual Part Alert (Jig)");
+// Initial behavior for the shortage modal's OK button (to process selection)
+function setOkButtonToProcessSelection() {
+    const selectedRadio = document.querySelector('input[name="selectedSaleOrder"]:checked');
+    if (selectedRadio) {
+        const saleOrderValue = selectedRadio.value;
+        selectedSaleOrderSpan.textContent = saleOrderValue;
+        fetchSpecificShortageList(currentTesterId, saleOrderValue);
+        document.getElementById('shortageModalTitle').textContent = 'Shortage & Availability List';
+        selectSoInstruction.classList.add('hidden');
+        saleOrderSelectionDiv.classList.add('hidden');
+        specificShortageListDiv.classList.remove('hidden');
+        downloadSpecificShortageExcelBtn.classList.remove('hidden'); // Show download button
+        setOkButtonToCloseModal(); // Now the OK button will close the modal
     } else {
-        showAlert('Error', 'No jig part data available to send a specific alert.', 'error');
+        showAlert('Selection Required', 'Please select a Sale Order from the list.', 'warning');
     }
 }
 
-// Function to trigger Excel download
+
 function downloadShortageExcel() {
-    if (!currentJigData || !currentJigData.summary || !currentJigData.summary.testerJigNumber) {
-        showAlert('Error', 'No jig data available to download shortage list.', 'warning');
+    if (!currentTesterId) {
+        showAlert('Error', 'No Tester Jig Number selected.', 'warning');
         return;
     }
-    const jigNumber = currentJigData.summary.testerJigNumber;
-    const downloadUrl = `${API_BASE_URL}/download_shortage_excel/${jigNumber}`;
-    window.location.href = downloadUrl; // This will trigger the file download
+    const selectedRadio = document.querySelector('input[name="selectedSaleOrder"]:checked');
+    if (!selectedRadio) {
+        showAlert('Error', 'Please select a Sale Order to download.', 'warning');
+        return;
+    }
+    const saleOrder = selectedRadio.value;
+    const downloadUrl = `${API_BASE_URL}/download_shortage_excel/${currentTesterId}/${saleOrder}`;
+    window.location.href = downloadUrl;
 }
 
 
-// --- EVENT LISTENERS (ATTACHED AFTER ALL FUNCTIONS ARE DEFINED) ---
+// --- EVENT LISTENERS ---
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('HAL Tester Jig Tracking System v2.0 initialized');
     console.log('Professional Interface Loaded - Hindustan Aeronautics Limited');
 
-    resetSections(true); // Clear input on initial load
+    resetSections(true);
 
-    // Focus on the input field with animation
     setTimeout(() => {
         jigNumberInput.focus();
         jigNumberInput.style.transform = 'scale(1.02)';
-        setTimeout(() => {
-            jigNumberInput.style.transform = '';
-        }, 200);
+        setTimeout(() => { jigNumberInput.style.transform = ''; }, 200);
     }, 500);
 
-    // Add welcome animation for cards
     const cards = document.querySelectorAll('.glass-card');
     cards.forEach((card, index) => {
         if (card.closest('.input-section')) {
             card.style.opacity = '0';
             card.style.transform = 'translateY(30px)';
-
             setTimeout(() => {
                 card.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
                 card.style.opacity = '1';
@@ -501,22 +545,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }, index * 200 + 700);
         }
     });
+
+    // Initial setup for shortage modal OK button
+    shortageModalOkBtn.onclick = setOkButtonToProcessSelection;
 });
 
-// Attach primary event listeners
+
 jigNumberInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        searchJigDetails();
-    }
+    if (e.key === 'Enter') { searchJigDetails(); }
 });
 searchJigBtn.addEventListener('click', searchJigDetails);
 
-// REMOVED: Event listeners for launchingStatusYesBtn and launchingStatusNoBtn are no longer needed
-
 shortageListBtn.addEventListener('click', showShortageListModal);
-
 closeShortageModalBtn.addEventListener('click', hideShortageListModal);
-shortageModalOkBtn.addEventListener('click', closeModalFunction);
 
 closeModalBtn.addEventListener('click', closeModalFunction);
 modalOkBtn.addEventListener('click', closeModalFunction);
@@ -525,60 +566,38 @@ sendAlertPlatformBtn.addEventListener('click', (e) => {
     handleSendAlertPlatformClick();
 });
 
-// Event listener for the download Excel button
-downloadShortageExcelBtn.addEventListener('click', (e) => {
+downloadSpecificShortageExcelBtn.addEventListener('click', (e) => {
     createParticleEffect(e.currentTarget);
     downloadShortageExcel();
 });
 
 
-// Auto-format jig number input
-jigNumberInput.addEventListener('input', (e) => {
-    let value = e.target.value.toUpperCase();
-    e.target.value = value;
-});
+jigNumberInput.addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); });
+jigNumberInput.addEventListener('focus', () => { jigNumberInput.parentElement.classList.add('focused'); });
+jigNumberInput.addEventListener('blur', () => { jigNumberInput.parentElement.classList.remove('focused'); });
 
-// Add input focus effects
-jigNumberInput.addEventListener('focus', () => {
-    jigNumberInput.parentElement.classList.add('focused');
-});
-
-jigNumberInput.addEventListener('blur', () => {
-    jigNumberInput.parentElement.classList.remove('focused');
-});
-
-
-// Enhanced keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeModalFunction();
         hideShortageListModal();
     }
-
-    if (e.ctrlKey && e.key === 'r') {
-        e.preventDefault();
-        clearForm();
-        jigNumberInput.focus();
-    }
-
-    if (e.key === 'Enter' && document.activeElement === jigNumberInput) {
-        searchJigDetails();
-    }
+    if (e.ctrlKey && e.key === 'r') { e.preventDefault(); clearForm(); jigNumberInput.focus(); }
+    if (e.key === 'Enter' && document.activeElement === jigNumberInput) { searchJigDetails(); }
 });
 
-// Auto-save functionality with enhanced local storage
 setInterval(() => {
-    if (jigNumberInput.value.trim() !== '' && currentJigData) {
+    if (jigNumberInput.value.trim() !== '' && currentTesterId) {
         const sessionData = {
             jigNumber: jigNumberInput.value.trim(),
-            lastSearchData: currentJigData.summary,
+            lastSearchTesterId: currentTesterId,
+            lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0'
+            version: '2.0-multi-so'
         };
         localStorage.setItem('hal_current_session', JSON.stringify(sessionData));
         console.log('Session auto-saved:', sessionData.jigNumber);
     }
-
+    // Visual auto-save indicator
     const saveIndicator = document.createElement('div');
     saveIndicator.textContent = '💾 Auto-saved';
     saveIndicator.style.position = 'fixed';
@@ -593,46 +612,37 @@ setInterval(() => {
     saveIndicator.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
     saveIndicator.style.transform = 'translateY(20px)';
     saveIndicator.style.zIndex = '1000';
-
     document.body.appendChild(saveIndicator);
-
     requestAnimationFrame(() => {
         saveIndicator.style.opacity = '1';
         saveIndicator.style.transform = 'translateY(0)';
         setTimeout(() => {
             saveIndicator.style.opacity = '0';
             saveIndicator.style.transform = 'translateY(20px)';
-            setTimeout(() => {
-                document.body.removeChild(saveIndicator);
-            }, 300);
+            setTimeout(() => { document.body.removeChild(saveIndicator); }, 300);
         }, 1500);
     });
 }, 45000);
 
-// Export enhanced functions for external use
+// Export for console access
 window.HALTrackingSystem = {
     searchJigDetails,
     clearForm,
-    getCurrentJigData: () => currentJigData,
+    getCurrentData: () => ({ testerId: currentTesterId, saleOrders: currentSaleOrders }),
     exportSession: () => {
         return {
             jigNumber: jigNumberInput.value.trim(),
-            lastSearchData: currentJigData ? currentJigData.summary : null,
+            lastSearchTesterId: currentTesterId,
+            lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0'
+            version: '2.0-multi-so'
         };
     }
 };
 
-// Add smooth scrolling for better UX
 document.documentElement.style.scrollBehavior = 'smooth';
 
-// Add intersection observer for animations
-const observerOptions = {
-    threshold: 0.1,
-    rootMargin: '0px 0px -50px 0px'
-};
-
+const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         if (entry.isIntersecting && !entry.target.classList.contains('fade-in')) {
@@ -640,7 +650,4 @@ const observer = new IntersectionObserver((entries) => {
         }
     });
 }, observerOptions);
-
-document.querySelectorAll('.glass-card').forEach(card => {
-    observer.observe(card);
-});
+document.querySelectorAll('.glass-card').forEach(card => { observer.observe(card); });
