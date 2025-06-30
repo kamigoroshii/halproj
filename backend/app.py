@@ -1,3 +1,4 @@
+# HALPROJ/backend/app.py - No changes needed, use the version from previous successful fix.
 import pandas as pd
 from flask import Flask, request, jsonify, render_template, url_for, send_file
 from flask_cors import CORS
@@ -41,7 +42,6 @@ def load_data():
         print(f"Raw data loaded: {len(df)} records from {DATA_FILE}")
 
         # Explicitly convert numeric columns to Python native types before grouping
-        # This prevents numpy.int64/float64 issues
         for col in ['requiredQuantity', 'currentStock']:
             if col in df.columns:
                 df[col] = df[col].apply(lambda x: int(x) if pd.api.types.is_integer_dtype(type(x)) else float(x) if pd.api.types.is_float_dtype(type(x)) else x)
