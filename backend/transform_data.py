@@ -5,13 +5,10 @@ from itertools import cycle
 
 print("Script started.")
 
-# Define paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.join(BASE_DIR, '..') # Points to HALPROJ/
-DATA_DIR = os.path.join(PROJECT_ROOT, 'data') # Points to HALPROJ/data/
+PROJECT_ROOT = os.path.join(BASE_DIR, '..')
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
-# List of input Excel files with their associated Sale Orders
-# IMPORTANT: Ensure these filenames exactly match what you have in your data folder.
 INPUT_FILES_CONFIG = [
     {'path': os.path.join(DATA_DIR, 'merged_assembly_parts_list (1).xlsx'), 'sale_order': '04882'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_1.xlsx'), 'sale_order': '04883'},
@@ -20,11 +17,6 @@ INPUT_FILES_CONFIG = [
 OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
 
 def transform_data(input_configs, output_path):
-    """
-    Transforms multiple raw XLSX data files into a structured CSV format,
-    assigning all records to a single Tester Jig Number (TJ-706),
-    and preserving their associated sale_order.
-    """
     print(f"Attempting to transform data from multiple sources.")
     print(f"Output will be saved to: {output_path}")
 
@@ -36,60 +28,57 @@ def transform_data(input_configs, output_path):
 
         try:
             df = pd.read_excel(file_path, sheet_name=0)
-
-            # 1. Clean Column Names
             df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
 
-            # Ensure 'sl_no' exists and is numeric, create if not
             if 'sl_no' not in df.columns or not pd.api.types.is_numeric_dtype(df['sl_no']):
                 print(f"Warning: 'sl_no' column not found or not numeric in {os.path.basename(file_path)}. Generating simple sequential SL No.")
                 df['sl_no'] = range(1, len(df) + 1)
 
-            # Ensure 'sub_assembly_or_part_no' exists and is string type
             if 'sub_assembly_or_part_no' not in df.columns:
                 print(f"Warning: 'sub_assembly_or_part_no' column not found in {os.path.basename(file_path)}. Using 'description' for part number.")
                 df['sub_assembly_or_part_no'] = df.get('description', '').astype(str).apply(lambda x: re.sub(r'[^a-zA-Z0-9-]', '', x)).str.replace('_', '-')
             else:
-                df['sub_assembly_or_part_no'] = df['sub_assembly_or_part_no'].astype(str) # Ensure it's string
+                df['sub_assembly_or_part_no'] = df['sub_assembly_or_part_no'].astype(str)
 
-            # 'part_number' is the cleaned SUB ASSEMBLY OR PART NO
             df['part_number'] = df['sub_assembly_or_part_no'].apply(lambda x: re.sub(r'[^a-zA-Z0-9-]', '', str(x)).strip())
-
-            # Assign ALL records to the single Tester Jig Number TJ-706
             df['tester_jig_number'] = 'TJ-706'
-
-            # Assign the current sale order from the config
             df['sale_order'] = sale_order
-            df['top_assy_no'] = '130575' # This can remain fixed for TJ-706 if it's overall Top Assy No
+            df['top_assy_no'] = '130575'
 
-            # Generate unique testerId (unique per row across all files)
-            # This makes sure each row from original sheets gets a unique ID if needed.
-            # We'll generate a global unique ID later if needed for individual parts across SOs.
             df['testerId_raw'] = df['sl_no'].astype(str) + '-' + df['part_number']
-            # Make it unique across all files being processed in this run by adding SO
             df['testerId'] = df['tester_jig_number'] + '-' + df['sale_order'] + '-' + df['testerId_raw']
 
-            # Original description
             df['unitName'] = df.get('description', 'N/A')
 
-            # Quantities - Ensure conversion to numeric types and handle NaN before availability check
-            df['requiredQuantity'] = pd.to_numeric(df.get('required_qty', 0).astype(str).str.extract(r'(\d+\.?\d*)')[0], errors='coerce').fillna(0).astype(int)
-            df['currentStock'] = pd.to_numeric(df.get('qty_ass', 0).astype(str).str.extract(r'(\d+\.?\d*)')[0], errors='coerce').fillna(0).astype(int)
+            # --- CRITICAL FIX FOR QUANTITIES ---
+            # Ensure quantities are numeric, handle non-numeric values by coercing to NaN, then fill with 0
+            df['requiredQuantity'] = pd.to_numeric(
+                df.get('required_qty', pd.Series()).astype(str).str.extract(r'(\d+\.?\d*)')[0],
+                errors='coerce'
+            ).fillna(0).astype(int)
 
-            # Official Incharge (per part)
-            df['officialIncharge'] = '+91-9876543210' # Placeholder number
+            df['currentStock'] = pd.to_numeric(
+                df.get('qty_ass', pd.Series()).astype(str).str.extract(r'(\d+\.?\d*)')[0],
+                errors='coerce'
+            ).fillna(0).astype(int)
+            # --- END CRITICAL FIX FOR QUANTITIES ---
 
-            # Derived status (for individual item tracking - e.g., if a single part is delivered)
+
+            df['officialIncharge'] = '+91-9876543210'
+
             df['status'] = df.apply(
                 lambda row: 'delivered' if row['currentStock'] >= row['requiredQuantity'] else 'pending',
                 axis=1
             )
 
-            # availability_status (for individual parts)
             def get_availability_status(row):
                 req_qty = row['requiredQuantity']
                 curr_stock = row['currentStock']
 
+                # Ensure these are actual numbers before comparison
+                if not isinstance(req_qty, (int, float)) or not isinstance(curr_stock, (int, float)):
+                    return "Error: Non-Numeric Qty" # Should ideally not be reached now
+                
                 if curr_stock == 0:
                     return "Critical Shortage"
                 elif curr_stock < req_qty:
@@ -118,7 +107,6 @@ def transform_data(input_configs, output_path):
 
     final_combined_df = pd.concat(all_dfs, ignore_index=True)
 
-    # Select and reorder desired columns for the output CSV
     final_df_cols = final_combined_df[[
         'testerId', 'tester_jig_number', 'sale_order', 'top_assy_no', 'part_number', 'unitName',
         'requiredQuantity', 'currentStock', 'availability_status', 'officialIncharge', 'status'
@@ -130,6 +118,5 @@ def transform_data(input_configs, output_path):
 
 if __name__ == "__main__":
     print(f"Starting data transformation process...")
-    # Ensure data directory exists
     os.makedirs(DATA_DIR, exist_ok=True)
     transform_data(INPUT_FILES_CONFIG, OUTPUT_CSV)

@@ -5,16 +5,15 @@ const searchJigBtn = document.getElementById('searchJigBtn');
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
 const displaySaleOrders = document.getElementById('displaySaleOrders');
-const displayTopAssyNo = document.getElementById('displayTopAssyNo');
+const displayTopAssyNo = document = document.getElementById('displayTopAssyNo'); // Changed from displayTopAssyNo = document.getElementById('displayTopAssyNo');
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
 const shortageListBtn = document.getElementById('shortageListBtn');
 
 const shortageListModal = document.getElementById('shortageListModal');
 const closeShortageModalBtn = document.getElementById('closeShortageModal');
-const shortageModalOkBtn = document.getElementById('shortageModalOk'); // This button will now just close the modal
+const shortageModalOkBtn = document.getElementById('shortageModalOk');
 
-// Reverted to single shortage table
 const shortageTableBody = document.getElementById('shortageTableBody');
 const noShortageMessage = document.getElementById('noShortageMessage');
 
@@ -24,16 +23,13 @@ const modalOkBtn = document.getElementById('modalOk');
 const sendAlertPlatformBtn = document.getElementById('sendAlertPlatformBtn');
 const loadingSpinner = document.getElementById('loadingSpinner');
 
-// NEW: Download ALL Parts as Excel button reference
 const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelBtn');
 
 
-// Global state variables
-let currentTesterId = null; // Stores the Tester Jig Number from search
-let currentSaleOrders = []; // Stores the list of Sale Orders for currentTesterId (for display)
+let currentTesterId = null;
+let currentSaleOrders = [];
 
 
-// IMPORTANT: This URL MUST point to your deployed Render backend.
 const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api';
 
 
@@ -100,13 +96,11 @@ function resetSections(clearInput = true) {
     currentTesterId = null;
     currentSaleOrders = [];
     
-    // Reset general display of Sale Orders
     displaySaleOrders.innerHTML = '<span>--</span>';
 
-    // Reset modal state
-    shortageTableBody.innerHTML = ''; // Clear table
-    noShortageMessage.classList.add('hidden'); // Hide message
-    document.getElementById('shortageModalTitle').textContent = 'All Parts List'; // Reset title
+    shortageTableBody.innerHTML = '';
+    noShortageMessage.classList.add('hidden');
+    document.getElementById('shortageModalTitle').textContent = 'All Parts List';
     
     [jigDetailsDisplaySection, shortageListModal, alertModal].forEach(section => {
         section.style.opacity = '';
@@ -282,7 +276,7 @@ async function searchJigDetails() {
             let firstShortageSaleOrder = null;
 
             if (currentSaleOrders.length === 0) {
-                 isOverallLaunched = false; // No SOs implies not launched if expecting parts
+                 isOverallLaunched = false;
                  firstShortageSaleOrder = "No Sale Orders Found";
             } else {
                 for (const so of currentSaleOrders) {
@@ -290,9 +284,11 @@ async function searchJigDetails() {
                     const soParts = await soResponse.json();
 
                     if (soResponse.ok && Array.isArray(soParts)) {
-                        const hasInsufficientPartsInSO = soParts.some(part =>
-                            part.availabilityStatus === "Shortage" || part.availabilityStatus === "Critical Shortage"
-                        );
+                        // FIX: Use .some() with trimmed status for robustness
+                        const hasInsufficientPartsInSO = soParts.some(part => {
+                            const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : '';
+                            return status === "Shortage" || status === "Critical Shortage";
+                        });
                         if (hasInsufficientPartsInSO) {
                             isOverallLaunched = false;
                             firstShortageSaleOrder = so;
@@ -381,7 +377,7 @@ async function showShortageListModal() {
     try {
         // Fetch ALL parts for the current Tester Jig
         const response = await fetch(`${API_BASE_URL}/all_parts_for_jig/${currentTesterId}`);
-        const allParts = await response.json(); // This 'allParts' is the flattened list
+        const allParts = await response.json();
         showLoading(false);
 
         if (response.ok && Array.isArray(allParts) && allParts.length > 0) {
@@ -389,22 +385,23 @@ async function showShortageListModal() {
 
             // Sort all parts by Sale Order then by availability status
             const sortedParts = [...allParts].sort((a, b) => {
-                const soCompare = a.sale_order.localeCompare(b.sale_order);
-                if (soCompare !== 0) return soCompare; // Sort by Sale Order first
+                const soCompare = String(a.sale_order).localeCompare(String(b.sale_order)); // Ensure string comparison
+                if (soCompare !== 0) return soCompare;
 
                 const statusOrder = { "Critical Shortage": 1, "Shortage": 2, "Pending": 3, "Adequate": 4, "Surplus": 5, "N/A": 6, "Unknown": 7 };
-                return statusOrder[a.availabilityStatus] - statusOrder[b.availabilityStatus];
+                return statusOrder[String(a.availabilityStatus).trim()] - statusOrder[String(b.availabilityStatus).trim()];
             });
 
 
             sortedParts.forEach(part => {
-                if (part.availabilityStatus === "Critical Shortage" || part.availabilityStatus === "Shortage" || part.availabilityStatus === "Surplus") {
+                const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : '';
+                if (status === "Critical Shortage" || status === "Shortage" || status === "Surplus") {
                     hasActualShortages = true;
                 }
 
                 const row = document.createElement('tr');
                 let rowClass = '';
-                const availabilityStatusCleaned = part.availabilityStatus ? part.availabilityStatus.toLowerCase().replace(/ /g, '_') : 'n_a';
+                const availabilityStatusCleaned = status.toLowerCase().replace(/ /g, '_');
 
                 if (availabilityStatusCleaned === "critical_shortage") {
                     rowClass = 'critical-shortage-row';
@@ -415,30 +412,25 @@ async function showShortageListModal() {
                 }
                 row.className = rowClass;
 
-                // --- FIX STARTS HERE ---
+                // --- FIX FOR QUANTITY DISPLAY AND STATUS ---
                 let actionRequiredText = 'N/A';
-                const required = Number(part.requiredQuantity); // Ensure it's a number
-                const current = Number(part.currentStock);   // Ensure it's a number
-                const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : ''; // Ensure string and trim spaces
+                const required = Number(part.requiredQuantity);
+                const current = Number(part.currentStock);
 
-                if (status === "Shortage") {
-                    if (!isNaN(required) && !isNaN(current)) {
+                if (!isNaN(required) && !isNaN(current)) { // Only calculate if both are valid numbers
+                    if (status === "Shortage") {
                         actionRequiredText = `Missing ${required - current} units.`;
-                    } else {
-                        actionRequiredText = 'Missing quantity (data error).';
-                    }
-                } else if (status === "Critical Shortage") {
-                    actionRequiredText = 'Immediate action: ZERO stock!';
-                } else if (status === "Surplus") {
-                    if (!isNaN(required) && !isNaN(current)) {
+                    } else if (status === "Critical Shortage") {
+                        actionRequiredText = 'Immediate action: ZERO stock!';
+                    } else if (status === "Surplus") {
                         actionRequiredText = `Surplus of ${current - required} units.`;
-                    } else {
-                        actionRequiredText = 'Surplus quantity (data error).';
+                    } else if (status === "Adequate") {
+                        actionRequiredText = 'NILL';
                     }
-                } else if (status === "Adequate") {
-                    actionRequiredText = 'NILL';
+                } else {
+                    actionRequiredText = 'Quantity data unavailable/invalid.'; // Fallback for invalid numbers
                 }
-                // --- FIX ENDS HERE ---
+                // --- END FIX FOR QUANTITY DISPLAY AND STATUS ---
 
                 row.innerHTML = `
                     <td>${part.part_number || '--'}</td>
@@ -469,7 +461,7 @@ async function showShortageListModal() {
         console.error('Error fetching all parts list:', error);
         showLoading(false);
         showAlert('Error', 'Failed to fetch the comprehensive parts list.', 'error');
-        shortageTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger-red">Error loading data.</td></tr>'; // Adjusted colspan
+        shortageTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger-red">Error loading data.</td></tr>';
     }
 
     shortageListModal.classList.remove('hidden');
@@ -479,14 +471,12 @@ async function showShortageListModal() {
 
 function hideShortageListModal() {
     shortageListModal.classList.add('hidden');
-    // Ensure modal state is reset for next time it's opened
     shortageTableBody.innerHTML = '';
     noShortageMessage.classList.add('hidden');
-    document.getElementById('shortageModalTitle').textContent = 'All Parts List'; // Reset title
+    document.getElementById('shortageModalTitle').textContent = 'All Parts List';
 }
 
 
-// NEW: Function to trigger Excel download for ALL parts
 function downloadAllPartsExcel() {
     if (!currentTesterId) {
         showAlert('Error', 'No Tester Jig Number selected.', 'warning');
@@ -533,7 +523,7 @@ searchJigBtn.addEventListener('click', searchJigDetails);
 
 shortageListBtn.addEventListener('click', showShortageListModal);
 closeShortageModalBtn.addEventListener('click', hideShortageListModal);
-shortageModalOkBtn.addEventListener('click', hideShortageListModal); // OK button now simply closes the modal
+shortageModalOkBtn.addEventListener('click', hideShortageListModal);
 
 closeModalBtn.addEventListener('click', closeModalFunction);
 modalOkBtn.addEventListener('click', closeModalFunction);
@@ -568,7 +558,7 @@ setInterval(() => {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts-fix' // Updated version for auto-save
+            version: '2.0-all-parts-fix-final' // Updated version for auto-save
         };
         localStorage.setItem('hal_current_session', JSON.stringify(sessionData));
         console.log('Session auto-saved:', sessionData.jigNumber);
@@ -609,7 +599,7 @@ window.HALTrackingSystem = {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts-fix'
+            version: '2.0-all-parts-fix-final'
         };
     }
 };

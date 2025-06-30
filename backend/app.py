@@ -32,6 +32,7 @@ testers_data_by_jig_and_so = {}
 def load_data():
     """
     Loads processed data, grouping it by tester_jig_number and sale_order.
+    Ensures all numeric values are standard Python ints/floats for JSON serialization.
     """
     global testers_data_by_jig_and_so
     testers_data_by_jig_and_so = {} # Clear existing data
@@ -39,10 +40,17 @@ def load_data():
         df = pd.read_csv(DATA_FILE)
         print(f"Raw data loaded: {len(df)} records from {DATA_FILE}")
 
+        # Explicitly convert numeric columns to Python native types before grouping
+        # This prevents numpy.int64/float64 issues
+        for col in ['requiredQuantity', 'currentStock']:
+            if col in df.columns:
+                df[col] = df[col].apply(lambda x: int(x) if pd.api.types.is_integer_dtype(type(x)) else float(x) if pd.api.types.is_float_dtype(type(x)) else x)
+
+
         for jig_name, jig_group in df.groupby('tester_jig_number'):
             jig_summary = {
                 'tester_jig_number': jig_name,
-                'top_assy_no': str(jig_group['top_assy_no'].iloc[0]) if not jig_group.empty else 'N/A' # Ensure string for JSON
+                'top_assy_no': str(jig_group['top_assy_no'].iloc[0]) if not jig_group.empty else 'N/A'
             }
             testers_data_by_jig_and_so[jig_name.lower()] = {
                 'summary': jig_summary,
@@ -51,16 +59,22 @@ def load_data():
 
             for so_number, so_group in jig_group.groupby('sale_order'):
                 parts_list = so_group.to_dict(orient='records')
-                # Ensure all values are JSON serializable
+                # Further ensure all values in parts_list are JSON serializable
+                cleaned_parts_list = []
                 for part in parts_list:
+                    cleaned_part = {}
                     for key, value in part.items():
-                        if pd.api.types.is_integer_dtype(type(value)):
-                            part[key] = int(value)
-                        elif pd.api.types.is_float_dtype(type(value)):
-                            part[key] = float(value)
+                        if pd.api.types.is_integer_dtype(type(value)) or isinstance(value, int):
+                            cleaned_part[key] = int(value)
+                        elif pd.api.types.is_float_dtype(type(value)) or isinstance(value, float):
+                            cleaned_part[key] = float(value)
                         elif pd.isna(value):
-                            part[key] = None # Convert NaN to None for JSON
-                testers_data_by_jig_and_so[jig_name.lower()]['sale_orders'][str(so_number)] = parts_list # Ensure SO number is string
+                            cleaned_part[key] = None
+                        else:
+                            cleaned_part[key] = value
+                    cleaned_parts_list.append(cleaned_part)
+                    
+                testers_data_by_jig_and_so[jig_name.lower()]['sale_orders'][str(so_number)] = cleaned_parts_list
 
         print(f"Successfully loaded and grouped data for {len(testers_data_by_jig_and_so)} unique Tester Jigs.")
     except FileNotFoundError:
@@ -106,7 +120,7 @@ def get_jig_details(tester_jig_number):
             'testerJigNumber': jig_data['summary']['tester_jig_number'],
             'topAssyNo': jig_data['summary']['top_assy_no']
         }
-        sale_orders_list = sorted(list(jig_data['sale_orders'].keys())) # Return sorted list of SOs
+        sale_orders_list = sorted(list(jig_data['sale_orders'].keys()))
 
         return jsonify({
             'summary': summary_info,
@@ -116,7 +130,6 @@ def get_jig_details(tester_jig_number):
         print(f"DEBUG: Tester Jig Number '{tester_jig_number}' not found.")
         return jsonify({'message': 'Tester Jig Number not found'}), 404
 
-# Endpoint to get specific shortage list (per Tester Jig and Sale Order) - kept as is
 @app.route('/api/shortage_list/<string:tester_jig_number>/<string:sale_order>', methods=['GET'])
 def get_specific_shortage_list(tester_jig_number, sale_order):
     print(f"DEBUG: get_specific_shortage_list for jig: {tester_jig_number}, SO: {sale_order}")
@@ -135,7 +148,6 @@ def get_specific_shortage_list(tester_jig_number, sale_order):
         print(f"DEBUG: Tester Jig Number '{tester_jig_number}' not found for shortage list request.")
         return jsonify({'message': 'Tester Jig Number not found'}), 404
 
-# NEW Endpoint: Get ALL parts for a Tester Jig (across all Sale Orders)
 @app.route('/api/all_parts_for_jig/<string:tester_jig_number>', methods=['GET'])
 def get_all_parts_for_jig(tester_jig_number):
     print(f"DEBUG: get_all_parts_for_jig endpoint hit for jig: {tester_jig_number}")
@@ -146,21 +158,16 @@ def get_all_parts_for_jig(tester_jig_number):
     if jig_data:
         all_parts = []
         for so_number, parts_list in jig_data['sale_orders'].items():
-            # Add sale_order to each part for display in the comprehensive list
             for part in parts_list:
-                part_copy = part.copy() # Avoid modifying original data
-                part_copy['sale_order'] = so_number # Add SO to each part record
+                part_copy = part.copy()
+                part_copy['sale_order'] = so_number
                 all_parts.append(part_copy)
-        
-        # Optionally sort all_parts if needed, e.g., by sale_order then part_number
-        # all_parts.sort(key=lambda x: (x.get('sale_order', ''), x.get('part_number', '')))
         
         return jsonify(all_parts), 200
     else:
         print(f"DEBUG: Tester Jig Number '{tester_jig_number}' not found.")
         return jsonify({'message': 'Tester Jig Number not found'}), 404
 
-# Endpoint for downloading specific shortage list - kept as is
 @app.route('/api/download_shortage_excel/<string:tester_jig_number>/<string:sale_order>', methods=['GET'])
 def download_specific_shortage_excel(tester_jig_number, sale_order):
     print(f"DEBUG: download_specific_shortage_excel for jig: {tester_jig_number}, SO: {sale_order}")
@@ -205,7 +212,6 @@ def download_specific_shortage_excel(tester_jig_number, sale_order):
         as_attachment=True
     )
 
-# NEW Endpoint: Download ALL parts for a Tester Jig (across all Sale Orders)
 @app.route('/api/download_all_parts_excel/<string:tester_jig_number>', methods=['GET'])
 def download_all_parts_excel(tester_jig_number):
     print(f"DEBUG: download_all_parts_excel for jig: {tester_jig_number}")
@@ -234,7 +240,7 @@ def download_all_parts_excel(tester_jig_number):
     ]]
     df_all_parts.rename(columns={
         'testerId': 'Tester ID',
-        'sale_order': 'Sale Order', # New column header
+        'sale_order': 'Sale Order',
         'part_number': 'Part Number',
         'unitName': 'Unit Name',
         'requiredQuantity': 'Required Quantity',
