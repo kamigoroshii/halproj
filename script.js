@@ -303,7 +303,7 @@ async function searchJigDetails() {
             displayJigSummary(currentJigData.summary); // Display basic summary first
 
             // Update the launching status display based on automatic detection
-            const newStatusText = isLaunched ? 'Launched' : 'Not Launched';
+            const newStatusText = isLaunched ? 'Yes' : 'No';
             const newStatusClass = `status-badge ${isLaunched ? 'status-delivered' : 'status-pending'}`;
             displayLaunchingStatus.textContent = newStatusText;
             displayLaunchingStatus.className = newStatusClass;
@@ -314,7 +314,7 @@ async function searchJigDetails() {
             // NEW LOGIC: Send Telegram alert if automatically detected as NOT Launched
             if (!isLaunched) {
                 // Simplified context for the Telegram message
-                sendAlert('telegram', currentJigData.summary, "Jig automatically detected as NOT launched (Part Shortage)");
+                sendAlert('telegram', currentJigData.summary, "Tester detected as NOT launched (Part Shortage)");
             } else {
                 showAlert('Launching Confirmed', `Tester Jig Number ${currentJigData.summary.testerJigNumber} has all required parts and is considered Launched.`, 'success');
             }
@@ -409,7 +409,7 @@ async function showShortageListModal() {
         } else if (part.availabilityStatus === "Surplus") {
             actionRequiredText = `Surplus of ${part.currentStock - part.requiredQuantity} units.`;
         } else if (part.availabilityStatus === "Adequate") {
-            actionRequiredText = 'Quantity is adequate.';
+            actionRequiredText = 'NILL';
         }
 
         row.innerHTML = `
