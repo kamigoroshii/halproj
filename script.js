@@ -5,7 +5,7 @@ const searchJigBtn = document.getElementById('searchJigBtn');
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
 const displaySaleOrders = document.getElementById('displaySaleOrders');
-const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // Corrected from 'document = document.getElementById'
+const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // FIX: Corrected typo (was 'document = document.getElementById')
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
 const shortageListBtn = document.getElementById('shortageListBtn');
@@ -27,10 +27,11 @@ const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelB
 
 
 let currentTesterId = null;
-let currentSaleOrders = [];
+let currentSaleOrders = []; // Stores the list of Sale Orders for currentTesterId (for display)
+let currentJigAllPartsData = null; // IMPORTANT: Stores all parts data from /api/all_parts_for_jig/
 
 
-const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api';
+const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; // IMPORTANT: Your Render URL
 
 
 // --- CORE UTILITY FUNCTIONS ---
@@ -95,6 +96,7 @@ function resetSections(clearInput = true) {
     }
     currentTesterId = null;
     currentSaleOrders = [];
+    currentJigAllPartsData = null; // Clear all parts data
     
     displaySaleOrders.innerHTML = '<span>--</span>';
 
@@ -257,15 +259,21 @@ async function searchJigDetails() {
     currentTesterId = jigNumberValue;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/jig_details/${jigNumberValue}`);
-        const data = await response.json();
+        // Fetch Jig Summary and Sale Orders
+        const jigDetailsResponse = await fetch(`${API_BASE_URL}/jig_details/${jigNumberValue}`);
+        const jigDetailsData = await jigDetailsResponse.json();
+
+        // Fetch ALL Parts for the current Tester Jig for launching status check and shortage display
+        const allPartsResponse = await fetch(`${API_BASE_URL}/all_parts_for_jig/${jigNumberValue}`);
+        const allPartsData = await allPartsResponse.json();
+        
         showLoading(false);
 
-        if (response.ok) {
-            const jigSummary = data.summary;
-            const saleOrders = data.saleOrders || [];
-
+        if (jigDetailsResponse.ok && allPartsResponse.ok) {
+            const jigSummary = jigDetailsData.summary;
+            const saleOrders = jigDetailsData.saleOrders || [];
             currentSaleOrders = saleOrders;
+            currentJigAllPartsData = allPartsData; // Store all parts data for direct use by shortage list
 
             displayJigSummary(jigSummary, currentSaleOrders);
             jigDetailsDisplaySection.classList.remove('hidden');
@@ -275,31 +283,20 @@ async function searchJigDetails() {
             let isOverallLaunched = true;
             let firstShortageSaleOrder = null;
 
-            if (currentSaleOrders.length === 0) {
-                 isOverallLaunched = false;
-                 firstShortageSaleOrder = "No Sale Orders Found";
+            if (!Array.isArray(currentJigAllPartsData) || currentJigAllPartsData.length === 0) {
+                 isOverallLaunched = false; // If no parts data, or empty, consider not launched
+                 firstShortageSaleOrder = "No Parts Data Found";
             } else {
-                for (const so of currentSaleOrders) {
-                    const soResponse = await fetch(`${API_BASE_URL}/shortage_list/${jigNumberValue}/${so}`);
-                    const soParts = await soResponse.json();
-
-                    if (soResponse.ok && Array.isArray(soParts)) {
-                        const hasInsufficientPartsInSO = soParts.some(part => {
-                            const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : '';
-                            return status === "Shortage" || status === "Critical Shortage";
-                        });
-                        if (hasInsufficientPartsInSO) {
-                            isOverallLaunched = false;
-                            firstShortageSaleOrder = so;
-                            break;
-                        }
-                    } else {
-                        console.warn(`Could not fetch details for Sale Order ${so} of ${jigNumberValue}. Assuming launched for this SO for status check.`);
+                for (const part of currentJigAllPartsData) { // Iterate through all parts
+                    const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : '';
+                    if (status === "Shortage" || status === "Critical Shortage") {
+                        isOverallLaunched = false;
+                        firstShortageSaleOrder = part.sale_order; // Get the SO where shortage was found
+                        break;
                     }
                 }
             }
             // --- End Automatic Launching Status Detection ---
-
 
             const newStatusText = isOverallLaunched ? 'Yes' : 'No';
             const newStatusClass = `status-badge ${isOverallLaunched ? 'status-delivered' : 'status-pending'}`;
@@ -313,16 +310,20 @@ async function searchJigDetails() {
             }
 
         } else {
+            // Handle cases where either jigDetails or allParts fetch failed
+            const errorMessage = jigDetailsData.message || allPartsData.message || 'Unknown error occurred.';
+            showAlert('Search Error', `Failed to retrieve all jig details: ${errorMessage}`, 'error');
+            
             currentTesterId = null;
             currentSaleOrders = [];
+            currentJigAllPartsData = null;
             displayJigSummary({ testerJigNumber: jigNumberValue, topAssyNo: 'N/A' }, []);
-            displayLaunchingStatus.textContent = 'Not Found';
-            displayLaunchingStatus.className = 'status-badge status-unknown';
+            displayLaunchingStatus.textContent = 'Error';
+            displayLaunchingStatus.className = 'status-badge status-pending';
             jigDetailsDisplaySection.classList.remove('hidden');
-            showAlert('Jig Not Found', `No details found for Tester Jig Number: ${jigNumberValue}. Please verify the number.`, 'warning');
         }
     } catch (error) {
-        console.error('Error fetching jig details:', error);
+        console.error('Error fetching jig details or all parts:', error);
         showLoading(false);
         showAlert(
             'Network Error',
@@ -331,6 +332,7 @@ async function searchJigDetails() {
         );
         currentTesterId = null;
         currentSaleOrders = [];
+        currentJigAllPartsData = null;
         displayJigSummary({ testerJigNumber: jigNumberValue, topAssyNo: 'Error' }, []);
         displayLaunchingStatus.textContent = 'Error';
         displayLaunchingStatus.className = 'status-badge status-pending';
@@ -364,21 +366,19 @@ function displayJigSummary(summary, saleOrders) {
 
 
 async function showShortageListModal() {
-    if (!currentTesterId) {
+    if (!currentTesterId || !currentJigAllPartsData) {
         showAlert('No Tester Selected', 'Please search for a Tester Jig Number first.', 'warning');
         return;
     }
 
     shortageTableBody.innerHTML = '';
     noShortageMessage.classList.add('hidden');
-    showLoading(true);
+    showLoading(true); // Show loading while populating table (even if data is local)
 
     try {
-        const response = await fetch(`${API_BASE_URL}/all_parts_for_jig/${currentTesterId}`);
-        const allParts = await response.json();
-        showLoading(false);
+        const allParts = currentJigAllPartsData; // Use already fetched data
 
-        if (response.ok && Array.isArray(allParts) && allParts.length > 0) {
+        if (Array.isArray(allParts) && allParts.length > 0) {
             let hasActualShortages = false;
 
             const sortedParts = [...allParts].sort((a, b) => {
@@ -427,7 +427,7 @@ async function showShortageListModal() {
                     actionRequiredText = 'Quantity data unavailable/invalid.';
                 }
                 // --- Debugging print for script.js ---
-                console.log(`Part: ${part.part_number}, SO: ${part.sale_order}, Req: ${required}, Curr: ${current}, Status: '${status}', Action: '${actionRequiredText}'`);
+                console.log(`Frontend Part: ${part.part_number}, SO: ${part.sale_order}, Req: ${required}, Curr: ${current}, Status: '${status}', Action: '${actionRequiredText}'`);
                 // --- End Debugging print ---
 
                 row.innerHTML = `
@@ -456,10 +456,11 @@ async function showShortageListModal() {
         }
 
     } catch (error) {
-        console.error('Error fetching all parts list:', error);
-        showLoading(false);
-        showAlert('Error', 'Failed to fetch the comprehensive parts list.', 'error');
+        console.error('Error populating all parts list:', error);
+        showAlert('Error', 'Failed to display the comprehensive parts list.', 'error');
         shortageTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger-red">Error loading data.</td></tr>';
+    } finally {
+        showLoading(false);
     }
 
     shortageListModal.classList.remove('hidden');
@@ -556,7 +557,7 @@ setInterval(() => {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts-fix-final'
+            version: '2.0-all-parts-final-fix'
         };
         localStorage.setItem('hal_current_session', JSON.stringify(sessionData));
         console.log('Session auto-saved:', sessionData.jigNumber);
@@ -597,7 +598,7 @@ window.HALTrackingSystem = {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts-fix-final'
+            version: '2.0-all-parts-final-fix'
         };
     }
 };

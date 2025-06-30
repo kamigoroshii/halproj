@@ -1,4 +1,4 @@
-# HALPROJ/backend/app.py - No changes needed, use the version from previous successful fix.
+# HALPROJ/backend/app.py - No changes needed from the previous version.
 import pandas as pd
 from flask import Flask, request, jsonify, render_template, url_for, send_file
 from flask_cors import CORS
