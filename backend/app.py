@@ -27,18 +27,6 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 DATA_FILE = os.path.join(PROJECT_ROOT, 'data', 'processed_testers_data.csv')
 
-# --- New Data Structure in Memory ---
-# This will store data like:
-# {
-#   'TJ-706': {
-#       'summary': {'tester_jig_number': 'TJ-706', 'top_assy_no': '130575'},
-#       'sale_orders': {
-#           '04882': [ {part_data}, {part_data} ],
-#           '04883': [ {part_data}, {part_data} ],
-#           '04884': [ {part_data}, {part_data} ]
-#       }
-#   }
-# }
 testers_data_by_jig_and_so = {}
 
 def load_data():
@@ -51,12 +39,10 @@ def load_data():
         df = pd.read_csv(DATA_FILE)
         print(f"Raw data loaded: {len(df)} records from {DATA_FILE}")
 
-        # Group by tester_jig_number and then by sale_order
         for jig_name, jig_group in df.groupby('tester_jig_number'):
             jig_summary = {
                 'tester_jig_number': jig_name,
-                # Assuming top_assy_no is consistent across all SOs for one jig
-                'top_assy_no': jig_group['top_assy_no'].iloc[0] if not jig_group.empty else 'N/A'
+                'top_assy_no': str(jig_group['top_assy_no'].iloc[0]) if not jig_group.empty else 'N/A' # Ensure string for JSON
             }
             testers_data_by_jig_and_so[jig_name.lower()] = {
                 'summary': jig_summary,
@@ -64,9 +50,17 @@ def load_data():
             }
 
             for so_number, so_group in jig_group.groupby('sale_order'):
-                # Convert this group to a list of dictionaries for frontend
                 parts_list = so_group.to_dict(orient='records')
-                testers_data_by_jig_and_so[jig_name.lower()]['sale_orders'][so_number] = parts_list
+                # Ensure all values are JSON serializable
+                for part in parts_list:
+                    for key, value in part.items():
+                        if pd.api.types.is_integer_dtype(type(value)):
+                            part[key] = int(value)
+                        elif pd.api.types.is_float_dtype(type(value)):
+                            part[key] = float(value)
+                        elif pd.isna(value):
+                            part[key] = None # Convert NaN to None for JSON
+                testers_data_by_jig_and_so[jig_name.lower()]['sale_orders'][str(so_number)] = parts_list # Ensure SO number is string
 
         print(f"Successfully loaded and grouped data for {len(testers_data_by_jig_and_so)} unique Tester Jigs.")
     except FileNotFoundError:
@@ -100,7 +94,6 @@ def send_telegram_message(message_text, parse_mode='Markdown'):
 
 # --- API Endpoints ---
 
-# Endpoint to get general jig details and list of associated Sale Orders
 @app.route('/api/jig_details/<string:tester_jig_number>', methods=['GET'])
 def get_jig_details(tester_jig_number):
     print(f"DEBUG: get_jig_details endpoint hit for jig: {tester_jig_number}")
@@ -111,10 +104,9 @@ def get_jig_details(tester_jig_number):
     if jig_data:
         summary_info = {
             'testerJigNumber': jig_data['summary']['tester_jig_number'],
-            'topAssyNo': str(jig_data['summary']['top_assy_no'])
+            'topAssyNo': jig_data['summary']['top_assy_no']
         }
-        # Return a list of all sale order numbers for this jig
-        sale_orders_list = list(jig_data['sale_orders'].keys())
+        sale_orders_list = sorted(list(jig_data['sale_orders'].keys())) # Return sorted list of SOs
 
         return jsonify({
             'summary': summary_info,
@@ -124,7 +116,7 @@ def get_jig_details(tester_jig_number):
         print(f"DEBUG: Tester Jig Number '{tester_jig_number}' not found.")
         return jsonify({'message': 'Tester Jig Number not found'}), 404
 
-# NEW Endpoint: Get shortage list for a specific Tester Jig and Sale Order
+# Endpoint to get specific shortage list (per Tester Jig and Sale Order) - kept as is
 @app.route('/api/shortage_list/<string:tester_jig_number>/<string:sale_order>', methods=['GET'])
 def get_specific_shortage_list(tester_jig_number, sale_order):
     print(f"DEBUG: get_specific_shortage_list for jig: {tester_jig_number}, SO: {sale_order}")
@@ -143,9 +135,35 @@ def get_specific_shortage_list(tester_jig_number, sale_order):
         print(f"DEBUG: Tester Jig Number '{tester_jig_number}' not found for shortage list request.")
         return jsonify({'message': 'Tester Jig Number not found'}), 404
 
+# NEW Endpoint: Get ALL parts for a Tester Jig (across all Sale Orders)
+@app.route('/api/all_parts_for_jig/<string:tester_jig_number>', methods=['GET'])
+def get_all_parts_for_jig(tester_jig_number):
+    print(f"DEBUG: get_all_parts_for_jig endpoint hit for jig: {tester_jig_number}")
+    jig_number_lower = tester_jig_number.lower()
+
+    jig_data = testers_data_by_jig_and_so.get(jig_number_lower)
+
+    if jig_data:
+        all_parts = []
+        for so_number, parts_list in jig_data['sale_orders'].items():
+            # Add sale_order to each part for display in the comprehensive list
+            for part in parts_list:
+                part_copy = part.copy() # Avoid modifying original data
+                part_copy['sale_order'] = so_number # Add SO to each part record
+                all_parts.append(part_copy)
+        
+        # Optionally sort all_parts if needed, e.g., by sale_order then part_number
+        # all_parts.sort(key=lambda x: (x.get('sale_order', ''), x.get('part_number', '')))
+        
+        return jsonify(all_parts), 200
+    else:
+        print(f"DEBUG: Tester Jig Number '{tester_jig_number}' not found.")
+        return jsonify({'message': 'Tester Jig Number not found'}), 404
+
+# Endpoint for downloading specific shortage list - kept as is
 @app.route('/api/download_shortage_excel/<string:tester_jig_number>/<string:sale_order>', methods=['GET'])
-def download_shortage_excel(tester_jig_number, sale_order):
-    print(f"DEBUG: download_shortage_excel for jig: {tester_jig_number}, SO: {sale_order}")
+def download_specific_shortage_excel(tester_jig_number, sale_order):
+    print(f"DEBUG: download_specific_shortage_excel for jig: {tester_jig_number}, SO: {sale_order}")
     jig_number_lower = tester_jig_number.lower()
 
     jig_data = testers_data_by_jig_and_so.get(jig_number_lower)
@@ -186,6 +204,58 @@ def download_shortage_excel(tester_jig_number, sale_order):
         download_name=f'HAL_Shortage_List_{tester_jig_number}_SO_{sale_order}.xlsx',
         as_attachment=True
     )
+
+# NEW Endpoint: Download ALL parts for a Tester Jig (across all Sale Orders)
+@app.route('/api/download_all_parts_excel/<string:tester_jig_number>', methods=['GET'])
+def download_all_parts_excel(tester_jig_number):
+    print(f"DEBUG: download_all_parts_excel for jig: {tester_jig_number}")
+    jig_number_lower = tester_jig_number.lower()
+
+    jig_data = testers_data_by_jig_and_so.get(jig_number_lower)
+
+    if not jig_data:
+        return jsonify({'message': 'Tester Jig Number not found for download.'}), 404
+
+    all_parts = []
+    for so_number, parts_list in jig_data['sale_orders'].items():
+        for part in parts_list:
+            part_copy = part.copy()
+            part_copy['sale_order'] = so_number
+            all_parts.append(part_copy)
+
+    if not all_parts:
+        return jsonify({'message': 'No parts found for this Tester Jig to download.'}), 404
+
+    df_all_parts = pd.DataFrame(all_parts)
+
+    df_all_parts = df_all_parts[[
+        'testerId', 'sale_order', 'part_number', 'unitName', 'requiredQuantity',
+        'currentStock', 'availability_status', 'officialIncharge', 'status'
+    ]]
+    df_all_parts.rename(columns={
+        'testerId': 'Tester ID',
+        'sale_order': 'Sale Order', # New column header
+        'part_number': 'Part Number',
+        'unitName': 'Unit Name',
+        'requiredQuantity': 'Required Quantity',
+        'currentStock': 'Current Stock',
+        'availability_status': 'Availability Status',
+        'officialIncharge': 'Official Incharge (Contact)',
+        'status': 'Part Status'
+    }, inplace=True)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_all_parts.to_excel(writer, index=False, sheet_name=f'All Parts for {tester_jig_number}')
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        download_name=f'HAL_All_Parts_{tester_jig_number}.xlsx',
+        as_attachment=True
+    )
+
 
 @app.route('/api/send_telegram_alert', methods=['POST'])
 def send_telegram_alert_route():

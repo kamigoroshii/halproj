@@ -4,7 +4,7 @@ const searchJigBtn = document.getElementById('searchJigBtn');
 
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
-const displaySaleOrders = document.getElementById('displaySaleOrders'); // New element for multiple Sale Orders
+const displaySaleOrders = document.getElementById('displaySaleOrders');
 const displayTopAssyNo = document.getElementById('displayTopAssyNo');
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
@@ -12,15 +12,11 @@ const shortageListBtn = document.getElementById('shortageListBtn');
 
 const shortageListModal = document.getElementById('shortageListModal');
 const closeShortageModalBtn = document.getElementById('closeShortageModal');
-const shortageModalOkBtn = document.getElementById('shortageModalOk'); // This button will have dynamic behavior
+const shortageModalOkBtn = document.getElementById('shortageModalOk'); // This button will now just close the modal
 
-const selectSoInstruction = document.getElementById('selectSoInstruction'); // New element for instruction text
-const saleOrderSelectionDiv = document.getElementById('saleOrderSelection'); // Container for Sale Order radio buttons
-
-const specificShortageListDiv = document.getElementById('specificShortageList'); // Section to show the actual shortage table
-const selectedSaleOrderSpan = document.getElementById('selectedSaleOrder'); // Span to display selected SO
-const specificShortageTableBody = document.getElementById('specificShortageTableBody'); // Table body for specific SO
-const noSpecificShortageMessage = document.getElementById('noSpecificShortageMessage'); // Message for no shortages in specific SO
+// Reverted to single shortage table
+const shortageTableBody = document.getElementById('shortageTableBody');
+const noShortageMessage = document.getElementById('noShortageMessage');
 
 const alertModal = document.getElementById('alertModal');
 const closeModalBtn = document.getElementById('closeModal');
@@ -28,17 +24,17 @@ const modalOkBtn = document.getElementById('modalOk');
 const sendAlertPlatformBtn = document.getElementById('sendAlertPlatformBtn');
 const loadingSpinner = document.getElementById('loadingSpinner');
 
-// NEW: Download as Excel button reference (specific to selected SO)
-const downloadSpecificShortageExcelBtn = document.getElementById('downloadSpecificShortageExcelBtn');
+// NEW: Download ALL Parts as Excel button reference
+const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelBtn');
 
 
 // Global state variables
 let currentTesterId = null; // Stores the Tester Jig Number from search
-let currentSaleOrders = []; // Stores the list of Sale Orders for currentTesterId
+let currentSaleOrders = []; // Stores the list of Sale Orders for currentTesterId (for display)
 
 
 // IMPORTANT: This URL MUST point to your deployed Render backend.
-const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; // Make sure this is your actual Render URL + /api
+const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api';
 
 
 // --- CORE UTILITY FUNCTIONS ---
@@ -102,13 +98,15 @@ function resetSections(clearInput = true) {
         jigNumberInput.value = '';
     }
     currentTesterId = null;
-    currentSaleOrders = []; // Clear Sale Orders
-    // Reset modal states
-    saleOrderSelectionDiv.classList.remove('hidden');
-    selectSoInstruction.classList.remove('hidden');
-    specificShortageListDiv.classList.add('hidden');
-    document.getElementById('shortageModalTitle').textContent = 'Select Sale Order'; // Reset modal title
-    downloadSpecificShortageExcelBtn.classList.add('hidden'); // Hide download button initially
+    currentSaleOrders = [];
+    
+    // Reset general display of Sale Orders
+    displaySaleOrders.innerHTML = '<span>--</span>';
+
+    // Reset modal state
+    shortageTableBody.innerHTML = ''; // Clear table
+    noShortageMessage.classList.add('hidden'); // Hide message
+    document.getElementById('shortageModalTitle').textContent = 'All Parts List'; // Reset title
     
     [jigDetailsDisplaySection, shortageListModal, alertModal].forEach(section => {
         section.style.opacity = '';
@@ -155,6 +153,7 @@ function createParticleEffect(element) {
     }
 }
 
+
 async function sendAlert(platform, alertDataObject, contextDescription) {
     const idForAlert = alertDataObject.testerJigNumber || 'N/A';
     if (idForAlert === 'N/A') {
@@ -184,18 +183,17 @@ async function sendAlert(platform, alertDataObject, contextDescription) {
         errorMessage = 'Failed to send WhatsApp simulation.';
         sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Sending WhatsApp...</span>';
 
-        const officialInchargeForAlert = alertDataObject.officialIncharge || 'N/A'; // For WhatsApp, we need an incharge
+        const officialInchargeForAlert = alertDataObject.officialIncharge || 'N/A';
         if (!officialInchargeForAlert || officialInchargeForAlert === 'N/A') {
              showAlert('Error', 'Cannot send WhatsApp alert: Official Incharge number is missing/invalid.', 'error');
              sendAlertPlatformBtn.innerHTML = '<i class="fab fa-whatsapp"></i> <span>Send Alert</span>';
              sendAlertPlatformBtn.disabled = false;
              return;
         }
-        // Specific payload for WhatsApp simulation
         const whatsappPayloadData = {
-            testerId: alertDataObject.testerId || idForAlert, // Use part's testerId if available, else jig ID
+            testerId: alertDataObject.testerId || idForAlert,
             officialIncharge: officialInchargeForAlert,
-            message: alertMessage // Send the simplified message content
+            message: alertMessage
         };
 
         try {
@@ -262,7 +260,7 @@ async function searchJigDetails() {
 
     resetSections(false);
     showLoading(true);
-    currentTesterId = jigNumberValue; // Store the current Tester ID
+    currentTesterId = jigNumberValue;
 
     try {
         const response = await fetch(`${API_BASE_URL}/jig_details/${jigNumberValue}`);
@@ -271,36 +269,42 @@ async function searchJigDetails() {
 
         if (response.ok) {
             const jigSummary = data.summary;
-            const saleOrders = data.saleOrders || []; // Ensure it's an array
+            const saleOrders = data.saleOrders || [];
 
-            currentSaleOrders = saleOrders; // Store the list of Sale Orders
+            currentSaleOrders = saleOrders;
 
             displayJigSummary(jigSummary, currentSaleOrders);
             jigDetailsDisplaySection.classList.remove('hidden');
             jigDetailsDisplaySection.classList.add('fade-in');
 
-            // Now, automatically determine launching status by checking all sale orders
+            // --- Automatic Launching Status Detection ---
             let isOverallLaunched = true;
             let firstShortageSaleOrder = null;
 
-            for (const so of currentSaleOrders) {
-                // Fetch details for each SO to check for shortages
-                const soResponse = await fetch(`${API_BASE_URL}/shortage_list/${jigNumberValue}/${so}`);
-                const soParts = await soResponse.json();
+            if (currentSaleOrders.length === 0) {
+                 isOverallLaunched = false; // No SOs implies not launched if expecting parts
+                 firstShortageSaleOrder = "No Sale Orders Found";
+            } else {
+                for (const so of currentSaleOrders) {
+                    const soResponse = await fetch(`${API_BASE_URL}/shortage_list/${jigNumberValue}/${so}`);
+                    const soParts = await soResponse.json();
 
-                if (soResponse.ok && Array.isArray(soParts)) {
-                    const hasInsufficientPartsInSO = soParts.some(part =>
-                        part.availabilityStatus === "Shortage" || part.availabilityStatus === "Critical Shortage"
-                    );
-                    if (hasInsufficientPartsInSO) {
-                        isOverallLaunched = false;
-                        firstShortageSaleOrder = so; // Store the first SO with shortage
-                        break; // Found a shortage, no need to check further SOs
+                    if (soResponse.ok && Array.isArray(soParts)) {
+                        const hasInsufficientPartsInSO = soParts.some(part =>
+                            part.availabilityStatus === "Shortage" || part.availabilityStatus === "Critical Shortage"
+                        );
+                        if (hasInsufficientPartsInSO) {
+                            isOverallLaunched = false;
+                            firstShortageSaleOrder = so;
+                            break;
+                        }
+                    } else {
+                        console.warn(`Could not fetch details for Sale Order ${so} of ${jigNumberValue}. Assuming launched for this SO for status check.`);
                     }
-                } else {
-                    console.warn(`Could not fetch details for Sale Order ${so} of ${jigNumberValue}. Assuming launched for this SO.`);
                 }
             }
+            // --- End Automatic Launching Status Detection ---
+
 
             const newStatusText = isOverallLaunched ? 'Yes' : 'No';
             const newStatusClass = `status-badge ${isOverallLaunched ? 'status-delivered' : 'status-pending'}`;
@@ -325,7 +329,11 @@ async function searchJigDetails() {
     } catch (error) {
         console.error('Error fetching jig details:', error);
         showLoading(false);
-        showAlert('Network Error', `Could not connect to the backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`, 'error');
+        showAlert(
+            'Network Error',
+            `Could not connect to the backend server at ${API_BASE_URL}. Please ensure the server is running and accessible.`,
+            'error'
+        );
         currentTesterId = null;
         currentSaleOrders = [];
         displayJigSummary({ testerJigNumber: jigNumberValue, topAssyNo: 'Error' }, []);
@@ -340,10 +348,10 @@ function displayJigSummary(summary, saleOrders) {
     displayJigNumber.textContent = summary.testerJigNumber;
     displayTopAssyNo.textContent = summary.topAssyNo;
 
-    displaySaleOrders.innerHTML = ''; // Clear previous content
+    displaySaleOrders.innerHTML = '';
     if (saleOrders && saleOrders.length > 0) {
         const ul = document.createElement('ul');
-        ul.className = 'list-disc list-inside space-y-1'; // Basic styling for readability
+        ul.className = 'list-disc list-inside space-y-1';
         saleOrders.forEach(so => {
             const li = document.createElement('li');
             li.textContent = so;
@@ -361,160 +369,115 @@ function displayJigSummary(summary, saleOrders) {
 
 
 async function showShortageListModal() {
-    if (!currentTesterId || currentSaleOrders.length === 0) {
-        showAlert('No Tester Selected', 'Please search for a Tester Jig Number first, and ensure it has associated Sale Orders.', 'warning');
+    if (!currentTesterId) {
+        showAlert('No Tester Selected', 'Please search for a Tester Jig Number first.', 'warning');
         return;
     }
 
-    saleOrderSelectionDiv.innerHTML = ''; // Clear previous options
-    specificShortageListDiv.classList.add('hidden'); // Hide the table section initially
-    downloadSpecificShortageExcelBtn.classList.add('hidden'); // Hide download button
-
-    shortageListModal.classList.remove('hidden');
-    shortageListModal.classList.add('fade-in');
-    document.getElementById('shortageModalTitle').textContent = 'Select Sale Order';
-    selectSoInstruction.classList.remove('hidden'); // Ensure instruction is visible
-    saleOrderSelectionDiv.classList.remove('hidden'); // Ensure selection div is visible
-
-
-    currentSaleOrders.forEach(saleOrder => {
-        const wrapperDiv = document.createElement('div');
-        wrapperDiv.className = 'flex items-center'; // For better alignment of radio button and label
-
-        const radioBtn = document.createElement('input');
-        radioBtn.type = 'radio';
-        radioBtn.name = 'selectedSaleOrder'; // All radios in this group
-        radioBtn.value = saleOrder;
-        radioBtn.id = `so-${saleOrder}`;
-        radioBtn.classList.add('form-radio', 'h-4', 'w-4', 'text-blue-600', 'focus:ring-blue-500', 'mr-2'); // Tailwind/custom styling
-
-        const label = document.createElement('label');
-        label.textContent = saleOrder;
-        label.htmlFor = `so-${saleOrder}`;
-        label.classList.add('text-neutral-200', 'font-medium', 'cursor-pointer');
-
-        wrapperDiv.appendChild(radioBtn);
-        wrapperDiv.appendChild(label);
-        saleOrderSelectionDiv.appendChild(wrapperDiv);
-    });
-
-    // Change the OK button to trigger the fetch of the specific shortage list
-    shortageModalOkBtn.onclick = async () => {
-        const selectedRadio = document.querySelector('input[name="selectedSaleOrder"]:checked');
-        if (selectedRadio) {
-            const saleOrderValue = selectedRadio.value;
-            selectedSaleOrderSpan.textContent = saleOrderValue; // Update the span
-            await fetchSpecificShortageList(currentTesterId, saleOrderValue);
-
-            document.getElementById('shortageModalTitle').textContent = 'Shortage & Availability List';
-            selectSoInstruction.classList.add('hidden'); // Hide instruction
-            saleOrderSelectionDiv.classList.add('hidden'); // Hide selection radios
-            specificShortageListDiv.classList.remove('hidden'); // Show the table
-            downloadSpecificShortageExcelBtn.classList.remove('hidden'); // Show download button
-        } else {
-            showAlert('Selection Required', 'Please select a Sale Order from the list.', 'warning');
-        }
-    };
-}
-
-
-async function fetchSpecificShortageList(testerId, saleOrder) {
-    specificShortageTableBody.innerHTML = '';
-    noSpecificShortageMessage.classList.add('hidden');
+    shortageTableBody.innerHTML = '';
+    noShortageMessage.classList.add('hidden');
     showLoading(true);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/shortage_list/${testerId}/${saleOrder}`);
-        const data = await response.json(); // This 'data' is the list of parts for the specific SO
+        // Fetch ALL parts for the current Tester Jig
+        const response = await fetch(`${API_BASE_URL}/all_parts_for_jig/${currentTesterId}`);
+        const allParts = await response.json(); // This 'allParts' is the flattened list
         showLoading(false);
 
-        if (response.ok && Array.isArray(data) && data.length > 0) {
-            data.forEach(part => {
+        if (response.ok && Array.isArray(allParts) && allParts.length > 0) {
+            let hasActualShortages = false;
+
+            // Sort all parts by Sale Order then by availability status
+            const sortedParts = [...allParts].sort((a, b) => {
+                const soCompare = a.sale_order.localeCompare(b.sale_order);
+                if (soCompare !== 0) return soCompare; // Sort by Sale Order first
+
+                const statusOrder = { "Critical Shortage": 1, "Shortage": 2, "Pending": 3, "Adequate": 4, "Surplus": 5, "N/A": 6, "Unknown": 7 };
+                return statusOrder[a.availabilityStatus] - statusOrder[b.availabilityStatus];
+            });
+
+
+            sortedParts.forEach(part => {
+                if (part.availabilityStatus === "Critical Shortage" || part.availabilityStatus === "Shortage" || part.availabilityStatus === "Surplus") {
+                    hasActualShortages = true;
+                }
+
                 const row = document.createElement('tr');
-                const availabilityStatusCleaned = part.availabilityStatus ? part.availabilityStatus.toLowerCase().replace(/ /g, '_') : 'n_a';
                 let rowClass = '';
-                if (availabilityStatusCleaned === "critical_shortage") rowClass = 'critical-shortage-row';
-                else if (availabilityStatusCleaned === "shortage") rowClass = 'shortage-row';
-                else if (availabilityStatusCleaned === "surplus") rowClass = 'surplus-row';
+                const availabilityStatusCleaned = part.availabilityStatus ? part.availabilityStatus.toLowerCase().replace(/ /g, '_') : 'n_a';
+
+                if (availabilityStatusCleaned === "critical_shortage") {
+                    rowClass = 'critical-shortage-row';
+                } else if (availabilityStatusCleaned === "shortage") {
+                    rowClass = 'shortage-row';
+                } else if (availabilityStatusCleaned === "surplus") {
+                    rowClass = 'surplus-row';
+                }
                 row.className = rowClass;
 
                 let actionRequiredText = 'N/A';
-                if (part.availabilityStatus === "Shortage") actionRequiredText = `Missing ${part.requiredQuantity - part.currentStock} units.`;
-                else if (part.availabilityStatus === "Critical Shortage") actionRequiredText = 'Immediate action: ZERO stock!';
-                else if (part.availabilityStatus === "Surplus") actionRequiredText = `Surplus of ${part.currentStock - part.requiredQuantity} units.`;
-                else if (part.availabilityStatus === "Adequate") actionRequiredText = 'NILL'; // As per previous request
+                if (part.availabilityStatus === "Shortage") {
+                    actionRequiredText = `Missing ${part.requiredQuantity - part.currentStock} units.`;
+                } else if (part.availabilityStatus === "Critical Shortage") {
+                    actionRequiredText = 'Immediate action: ZERO stock!';
+                } else if (part.availabilityStatus === "Surplus") {
+                    actionRequiredText = `Surplus of ${part.currentStock - part.requiredQuantity} units.`;
+                } else if (part.availabilityStatus === "Adequate") {
+                    actionRequiredText = 'NILL';
+                }
 
                 row.innerHTML = `
-                    <td>${part.part_number || '--'}</td> <td>${part.unitName || '--'}</td>
-                    <td>${part.requiredQuantity !== undefined ? part.requiredQuantity : '--'}</td>
+                    <td>${part.part_number || '--'}</td>
+                    <td>${part.unitName || '--'}</td>
+                    <td>${part.sale_order || '--'}</td> <td>${part.requiredQuantity !== undefined ? part.requiredQuantity : '--'}</td>
                     <td>${part.currentStock !== undefined ? part.currentStock : '--'}</td>
                     <td><span class="status-badge status-${availabilityStatusCleaned}">${part.availabilityStatus || 'N/A'}</span></td>
                     <td>${actionRequiredText}</td>
                 `;
-                specificShortageTableBody.appendChild(row);
+                shortageTableBody.appendChild(row);
             });
-            noSpecificShortageMessage.classList.add('hidden');
-        } else {
-            noSpecificShortageMessage.classList.remove('hidden');
-            noSpecificShortageMessage.textContent = `No parts or shortages found for Sale Order: ${saleOrder}`;
-            specificShortageTableBody.innerHTML = ''; // Clear table body if no data
-        }
-    } catch (error) {
-        console.error('Error fetching specific shortage list:', error);
-        showLoading(false);
-        showAlert('Error', 'Failed to fetch shortage list for the selected Sale Order.', 'error');
-        specificShortageTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-danger-red">Error loading data.</td></tr>';
-    }
-}
 
-// Ensure the OK button in the shortage modal closes the modal when the table is displayed
-function setOkButtonToCloseModal() {
-    shortageModalOkBtn.onclick = hideShortageListModal;
+            if (!hasActualShortages) {
+                noShortageMessage.classList.remove('hidden');
+                noShortageMessage.textContent = 'All components across all Sale Orders have adequate stock for this Tester Jig.';
+            } else {
+                noShortageMessage.classList.add('hidden');
+            }
+
+        } else {
+            noShortageMessage.classList.remove('hidden');
+            noShortageMessage.textContent = `No parts found for Tester Jig: ${currentTesterId}.`;
+            shortageTableBody.innerHTML = '';
+        }
+
+    } catch (error) {
+        console.error('Error fetching all parts list:', error);
+        showLoading(false);
+        showAlert('Error', 'Failed to fetch the comprehensive parts list.', 'error');
+        shortageTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger-red">Error loading data.</td></tr>'; // Adjusted colspan
+    }
+
+    shortageListModal.classList.remove('hidden');
+    shortageListModal.classList.add('fade-in');
 }
 
 
 function hideShortageListModal() {
     shortageListModal.classList.add('hidden');
-    // Reset modal state for next time it's opened
-    saleOrderSelectionDiv.classList.remove('hidden');
-    selectSoInstruction.classList.remove('hidden');
-    specificShortageListDiv.classList.add('hidden');
-    downloadSpecificShortageExcelBtn.classList.add('hidden'); // Hide download button
-    document.getElementById('shortageModalTitle').textContent = 'Select Sale Order';
-    shortageModalOkBtn.onclick = setOkButtonToProcessSelection; // Reset OK button behavior to handle selection
-}
-
-// Initial behavior for the shortage modal's OK button (to process selection)
-function setOkButtonToProcessSelection() {
-    const selectedRadio = document.querySelector('input[name="selectedSaleOrder"]:checked');
-    if (selectedRadio) {
-        const saleOrderValue = selectedRadio.value;
-        selectedSaleOrderSpan.textContent = saleOrderValue;
-        fetchSpecificShortageList(currentTesterId, saleOrderValue);
-        document.getElementById('shortageModalTitle').textContent = 'Shortage & Availability List';
-        selectSoInstruction.classList.add('hidden');
-        saleOrderSelectionDiv.classList.add('hidden');
-        specificShortageListDiv.classList.remove('hidden');
-        downloadSpecificShortageExcelBtn.classList.remove('hidden'); // Show download button
-        setOkButtonToCloseModal(); // Now the OK button will close the modal
-    } else {
-        showAlert('Selection Required', 'Please select a Sale Order from the list.', 'warning');
-    }
+    // Ensure modal state is reset for next time it's opened
+    shortageTableBody.innerHTML = '';
+    noShortageMessage.classList.add('hidden');
+    document.getElementById('shortageModalTitle').textContent = 'All Parts List'; // Reset title
 }
 
 
-function downloadShortageExcel() {
+// NEW: Function to trigger Excel download for ALL parts
+function downloadAllPartsExcel() {
     if (!currentTesterId) {
         showAlert('Error', 'No Tester Jig Number selected.', 'warning');
         return;
     }
-    const selectedRadio = document.querySelector('input[name="selectedSaleOrder"]:checked');
-    if (!selectedRadio) {
-        showAlert('Error', 'Please select a Sale Order to download.', 'warning');
-        return;
-    }
-    const saleOrder = selectedRadio.value;
-    const downloadUrl = `${API_BASE_URL}/download_shortage_excel/${currentTesterId}/${saleOrder}`;
+    const downloadUrl = `${API_BASE_URL}/download_all_parts_excel/${currentTesterId}`;
     window.location.href = downloadUrl;
 }
 
@@ -545,9 +508,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }, index * 200 + 700);
         }
     });
-
-    // Initial setup for shortage modal OK button
-    shortageModalOkBtn.onclick = setOkButtonToProcessSelection;
 });
 
 
@@ -558,6 +518,7 @@ searchJigBtn.addEventListener('click', searchJigDetails);
 
 shortageListBtn.addEventListener('click', showShortageListModal);
 closeShortageModalBtn.addEventListener('click', hideShortageListModal);
+shortageModalOkBtn.addEventListener('click', hideShortageListModal); // OK button now simply closes the modal
 
 closeModalBtn.addEventListener('click', closeModalFunction);
 modalOkBtn.addEventListener('click', closeModalFunction);
@@ -566,9 +527,9 @@ sendAlertPlatformBtn.addEventListener('click', (e) => {
     handleSendAlertPlatformClick();
 });
 
-downloadSpecificShortageExcelBtn.addEventListener('click', (e) => {
+downloadAllPartsExcelBtn.addEventListener('click', (e) => {
     createParticleEffect(e.currentTarget);
-    downloadShortageExcel();
+    downloadAllPartsExcel();
 });
 
 
@@ -592,12 +553,11 @@ setInterval(() => {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-multi-so'
+            version: '2.0-all-parts'
         };
         localStorage.setItem('hal_current_session', JSON.stringify(sessionData));
         console.log('Session auto-saved:', sessionData.jigNumber);
     }
-    // Visual auto-save indicator
     const saveIndicator = document.createElement('div');
     saveIndicator.textContent = '💾 Auto-saved';
     saveIndicator.style.position = 'fixed';
@@ -624,7 +584,6 @@ setInterval(() => {
     });
 }, 45000);
 
-// Export for console access
 window.HALTrackingSystem = {
     searchJigDetails,
     clearForm,
@@ -635,7 +594,7 @@ window.HALTrackingSystem = {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-multi-so'
+            version: '2.0-all-parts'
         };
     }
 };
