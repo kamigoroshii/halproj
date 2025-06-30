@@ -8,12 +8,13 @@ const displaySaleOrder = document.getElementById('displaySaleOrder');
 const displayTopAssyNo = document.getElementById('displayTopAssyNo');
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
-const launchingStatusYesBtn = document.getElementById('launchingStatusYes'); 
-const launchingStatusNoBtn = document.getElementById('launchingStatusNo');   
+// REMOVED: launchingStatusYesBtn and launchingStatusNoBtn are no longer needed
+// const launchingStatusYesBtn = document.getElementById('launchingStatusYes'); 
+// const launchingStatusNoBtn = document.getElementById('launchingStatusNo');   
 
 const shortageListBtn = document.getElementById('shortageListBtn');
 
-const shortageListModal = document.getElementById('shortageListModal'); // This modal is back in use
+const shortageListModal = document.getElementById('shortageListModal'); 
 const closeShortageModalBtn = document.getElementById('closeShortageModal'); 
 const shortageModalOkBtn = document.getElementById('shortageModalOk'); 
 const shortageTableBody = document.getElementById('shortageTableBody'); 
@@ -32,14 +33,8 @@ const downloadShortageExcelBtn = document.getElementById('downloadShortageExcelB
 // Global state variables
 let currentJigData = null; // Stores summary and details from /api/jig_details
 
-// ********************************************************************************
-// >>>>> IMPORTANT FIX: Change this API_BASE_URL to your deployed Render URL's API endpoint <<<<<
-// ********************************************************************************
-// You MUST replace 'https://hal-jig-tracker.onrender.com' with your EXACT Render service URL.
-// For example, if your Render URL is 'https://my-awesome-app.onrender.com',
-// then API_BASE_URL should be 'https://my-awesome-app.onrender.com/api'.
-const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; 
-// ********************************************************************************
+// IMPORTANT: This URL MUST point to your deployed Render backend.
+const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; // Make sure this is your actual Render URL + /api
 
 
 // --- CORE UTILITY FUNCTIONS (MUST BE DEFINED FIRST) ---
@@ -289,7 +284,6 @@ async function searchJigDetails() {
     showLoading(true);
 
     try {
-        // This is where the API call is made. It uses the API_BASE_URL.
         const response = await fetch(`${API_BASE_URL}/jig_details/${jigNumberValue}`);
         const data = await response.json();
 
@@ -297,12 +291,36 @@ async function searchJigDetails() {
 
         if (response.ok) {
             currentJigData = data; // Store both summary and details
-            displayJigSummary(currentJigData.summary);
+
+            // NEW LOGIC: Automatically determine launching status
+            const hasInsufficientParts = currentJigData.details.some(part => 
+                part.availabilityStatus === "Shortage" || part.availabilityStatus === "Critical Shortage"
+            );
+
+            const isLaunched = !hasInsufficientParts; // If no insufficient parts, it's launched
+
+            displayJigSummary(currentJigData.summary); // Display basic summary first
+            
+            // Update the launching status display based on automatic detection
+            const newStatusText = isLaunched ? 'Launched' : 'Not Launched';
+            const newStatusClass = `status-badge ${isLaunched ? 'status-delivered' : 'status-pending'}`;
+            displayLaunchingStatus.textContent = newStatusText;
+            displayLaunchingStatus.className = newStatusClass;
+
             jigDetailsDisplaySection.classList.remove('hidden'); // Show the jig details section
             jigDetailsDisplaySection.classList.add('fade-in');
             
-            // NOTE: Launching status is now set by user click, not determined by backend initially.
-            // The display element will show the default '--' until user interacts.
+            // NEW LOGIC: Send Telegram alert if automatically detected as NOT Launched
+            if (!isLaunched) {
+                showAlert(
+                    'Launching Status Alert',
+                    `Tester Jig Number ${currentJigData.summary.testerJigNumber} is automatically detected as NOT launched due to part shortages. A Telegram alert will be sent.`,
+                    'alert'
+                );
+                sendAlert('telegram', currentJigData.summary, "Tester Jig Automatic Launching Status (Shortage Detected)");
+            } else {
+                showAlert('Launching Confirmed', `Tester Jig Number ${currentJigData.summary.testerJigNumber} has all required parts and is considered Launched.`, 'success');
+            }
 
         } else {
             currentJigData = null;
@@ -312,6 +330,8 @@ async function searchJigDetails() {
                 topAssyNo: 'N/A',
                 launchingStatus: '--' // Initial state for user input
             });
+            displayLaunchingStatus.textContent = 'Not Found'; // Set explicit status for not found
+            displayLaunchingStatus.className = 'status-badge status-unknown';
             jigDetailsDisplaySection.classList.remove('hidden'); // Still show section with 'Not Found'
             showAlert(
                 'Jig Not Found',
@@ -334,6 +354,8 @@ async function searchJigDetails() {
             topAssyNo: 'Error',
             launchingStatus: 'Error'
         });
+        displayLaunchingStatus.textContent = 'Error';
+        displayLaunchingStatus.className = 'status-badge status-pending'; // Indicate error visually
         jigDetailsDisplaySection.classList.remove('hidden');
     }
 }
@@ -343,43 +365,17 @@ function displayJigSummary(summary) {
     displayJigNumber.textContent = summary.testerJigNumber;
     displaySaleOrder.textContent = summary.saleOrder;
     displayTopAssyNo.textContent = summary.topAssyNo;
-    displayLaunchingStatus.textContent = '--'; // Initial state before user input
-    displayLaunchingStatus.className = 'status-badge status-unknown'; // Initial status class
+    // Launching status is now set within searchJigDetails after fetching data
+    displayLaunchingStatus.textContent = '--'; 
+    displayLaunchingStatus.className = 'status-badge status-unknown'; 
 }
 
-// Handles the user-driven Launching Status selection
+// REMOVED: handleLaunchingStatus function is no longer needed as status is auto-detected
+/*
 async function handleLaunchingStatus(isLaunched) {
-    if (!currentJigData || !currentJigData.summary || !currentJigData.summary.testerJigNumber) {
-        showAlert('Jig Not Found', 'Please search for a Tester Jig Number first before setting launching status.', 'warning');
-        return;
-    }
-
-    showLoading(true);
-    const clickedBtn = isLaunched ? launchingStatusYesBtn : launchingStatusNoBtn;
-    createParticleEffect(clickedBtn);
-    clickedBtn.style.transform = 'scale(0.95)';
-    setTimeout(() => { clickedBtn.style.transform = ''; }, 150);
-
-    const newStatusText = isLaunched ? 'Launched' : 'Not Launched';
-    const newStatusClass = `status-badge ${isLaunched ? 'status-delivered' : 'status-pending'}`;
-
-    displayLaunchingStatus.textContent = newStatusText;
-    displayLaunchingStatus.className = newStatusClass;
-
-    if (!isLaunched) {
-        // If not launched, send Telegram alert
-        showAlert(
-            'Launching Status Alert',
-            `Tester Jig Number ${currentJigData.summary.testerJigNumber} is marked as NOT launched. A Telegram alert will be sent.`,
-            'alert'
-        );
-        sendAlert('telegram', currentJigData.summary, "Tester Jig Launching Status (User Input)");
-    } else {
-        showAlert('Launching Confirmed', `Tester Jig Number ${currentJigData.summary.testerJigNumber} is confirmed as Launched.`, 'success');
-    }
-    
-    showLoading(false);
+    // ... (removed content) ...
 }
+*/
 
 
 // Shows the shortage list modal with parts for the current jig
@@ -399,14 +395,12 @@ async function showShortageListModal() {
     });
 
     sortedParts.forEach(part => {
-        // Check for shortage/surplus statuses, not just critical shortage
         if (part.availabilityStatus === "Critical Shortage" || part.availabilityStatus === "Shortage" || part.availabilityStatus === "Surplus") {
             hasActualShortages = true;
         }
 
         const row = document.createElement('tr');
         let rowClass = '';
-        // Use availabilityStatus directly for class name, after cleaning
         const availabilityStatusCleaned = part.availabilityStatus ? part.availabilityStatus.toLowerCase().replace(/ /g, '_') : 'n_a';
 
         if (availabilityStatusCleaned === "critical_shortage") {
@@ -442,13 +436,12 @@ async function showShortageListModal() {
 
     if (hasActualShortages) {
         noShortageMessage.classList.add('hidden');
-        // Trigger Telegram alert for shortage
+        // REMOVED: No Telegram alert here as per new requirements
         showAlert(
-            'Shortage Detected!', 
-            `Shortages or surpluses found for Tester Jig Number: ${currentJigData.summary.testerJigNumber}. A Telegram alert will be sent.`, 
+            'Shortages/Surpluses Detected', 
+            `Shortages or surpluses found for Tester Jig Number: ${currentJigData.summary.testerJigNumber}. View details below.`, 
             'alert'
         );
-        sendAlert('telegram', currentJigData.summary, "Shortage List Displayed");
     } else {
         noShortageMessage.classList.remove('hidden'); 
         noShortageMessage.textContent = 'All components have adequate stock for this Tester Jig.';
@@ -532,8 +525,9 @@ jigNumberInput.addEventListener('keypress', (e) => {
 });
 searchJigBtn.addEventListener('click', searchJigDetails); 
 
-launchingStatusYesBtn.addEventListener('click', () => handleLaunchingStatus(true)); 
-launchingStatusNoBtn.addEventListener('click', () => handleLaunchingStatus(false));   
+// REMOVED: Event listeners for launchingStatusYesBtn and launchingStatusNoBtn
+// launchingStatusYesBtn.addEventListener('click', () => handleLaunchingStatus(true)); 
+// launchingStatusNoBtn.addEventListener('click', () => handleLaunchingStatus(false));   
 
 shortageListBtn.addEventListener('click', showShortageListModal); // Modal is back
 
@@ -554,13 +548,13 @@ downloadShortageExcelBtn.addEventListener('click', (e) => {
 });
 
 
-// Auto-format jig number input (already defined above DOMContentLoaded, but placing listener here)
+// Auto-format jig number input
 jigNumberInput.addEventListener('input', (e) => {
     let value = e.target.value.toUpperCase();
     e.target.value = value;
 });
 
-// Add input focus effects (already defined above DOMContentLoaded, but placing listener here)
+// Add input focus effects
 jigNumberInput.addEventListener('focus', () => {
     jigNumberInput.parentElement.classList.add('focused');
 });
@@ -574,7 +568,7 @@ jigNumberInput.addEventListener('blur', () => {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeModalFunction();
-        hideShortageListModal(); // Re-added hideShortageListModal()
+        hideShortageListModal();
     }
     
     if (e.ctrlKey && e.key === 'r') {
@@ -625,7 +619,7 @@ setInterval(() => {
             saveIndicator.style.opacity = '0';
             saveIndicator.style.transform = 'translateY(20px)';
             setTimeout(() => {
-                document.body.removeChild(saveIndicator); // Corrected this line
+                document.body.removeChild(saveIndicator);
             }, 300);
         }, 1500);
     });
