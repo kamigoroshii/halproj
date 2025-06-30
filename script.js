@@ -5,7 +5,7 @@ const searchJigBtn = document.getElementById('searchJigBtn');
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
 const displaySaleOrders = document.getElementById('displaySaleOrders');
-const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // FIX: Corrected typo (was 'document = document.getElementById')
+const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // FIX: Corrected typo
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
 const shortageListBtn = document.getElementById('shortageListBtn');
@@ -267,6 +267,9 @@ async function searchJigDetails() {
         const allPartsResponse = await fetch(`${API_BASE_URL}/all_parts_for_jig/${jigNumberValue}`);
         const allPartsData = await allPartsResponse.json();
         
+        console.log("DEBUG: Jig Details Data received:", jigDetailsData);
+        console.log("DEBUG: All Parts Data received:", allPartsData);
+
         showLoading(false);
 
         if (jigDetailsResponse.ok && allPartsResponse.ok) {
@@ -286,14 +289,19 @@ async function searchJigDetails() {
             if (!Array.isArray(currentJigAllPartsData) || currentJigAllPartsData.length === 0) {
                  isOverallLaunched = false; // If no parts data, or empty, consider not launched
                  firstShortageSaleOrder = "No Parts Data Found";
+                 console.log("Launching Status: Not Launched (No parts data found)");
             } else {
                 for (const part of currentJigAllPartsData) { // Iterate through all parts
                     const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : '';
                     if (status === "Shortage" || status === "Critical Shortage") {
                         isOverallLaunched = false;
                         firstShortageSaleOrder = part.sale_order; // Get the SO where shortage was found
-                        break;
+                        console.log(`Launching Status: Not Launched (Shortage/Critical Shortage in SO: ${firstShortageSaleOrder}, Part: ${part.part_number}, Status: ${status})`);
+                        break; // Found a shortage, no need to check further parts
                     }
+                }
+                if (isOverallLaunched) {
+                     console.log("Launching Status: Launched (All parts adequate/surplus)");
                 }
             }
             // --- End Automatic Launching Status Detection ---
@@ -426,9 +434,7 @@ async function showShortageListModal() {
                 } else {
                     actionRequiredText = 'Quantity data unavailable/invalid.';
                 }
-                // --- Debugging print for script.js ---
                 console.log(`Frontend Part: ${part.part_number}, SO: ${part.sale_order}, Req: ${required}, Curr: ${current}, Status: '${status}', Action: '${actionRequiredText}'`);
-                // --- End Debugging print ---
 
                 row.innerHTML = `
                     <td>${part.part_number || '--'}</td>
