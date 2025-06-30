@@ -5,7 +5,7 @@ const searchJigBtn = document.getElementById('searchJigBtn');
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
 const displaySaleOrders = document.getElementById('displaySaleOrders');
-const displayTopAssyNo = document = document.getElementById('displayTopAssyNo'); // Changed from displayTopAssyNo = document.getElementById('displayTopAssyNo');
+const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // Corrected from 'document = document.getElementById'
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
 const shortageListBtn = document.getElementById('shortageListBtn');
@@ -284,7 +284,6 @@ async function searchJigDetails() {
                     const soParts = await soResponse.json();
 
                     if (soResponse.ok && Array.isArray(soParts)) {
-                        // FIX: Use .some() with trimmed status for robustness
                         const hasInsufficientPartsInSO = soParts.some(part => {
                             const status = part.availabilityStatus ? String(part.availabilityStatus).trim() : '';
                             return status === "Shortage" || status === "Critical Shortage";
@@ -375,7 +374,6 @@ async function showShortageListModal() {
     showLoading(true);
 
     try {
-        // Fetch ALL parts for the current Tester Jig
         const response = await fetch(`${API_BASE_URL}/all_parts_for_jig/${currentTesterId}`);
         const allParts = await response.json();
         showLoading(false);
@@ -383,9 +381,8 @@ async function showShortageListModal() {
         if (response.ok && Array.isArray(allParts) && allParts.length > 0) {
             let hasActualShortages = false;
 
-            // Sort all parts by Sale Order then by availability status
             const sortedParts = [...allParts].sort((a, b) => {
-                const soCompare = String(a.sale_order).localeCompare(String(b.sale_order)); // Ensure string comparison
+                const soCompare = String(a.sale_order).localeCompare(String(b.sale_order));
                 if (soCompare !== 0) return soCompare;
 
                 const statusOrder = { "Critical Shortage": 1, "Shortage": 2, "Pending": 3, "Adequate": 4, "Surplus": 5, "N/A": 6, "Unknown": 7 };
@@ -412,12 +409,11 @@ async function showShortageListModal() {
                 }
                 row.className = rowClass;
 
-                // --- FIX FOR QUANTITY DISPLAY AND STATUS ---
                 let actionRequiredText = 'N/A';
                 const required = Number(part.requiredQuantity);
                 const current = Number(part.currentStock);
 
-                if (!isNaN(required) && !isNaN(current)) { // Only calculate if both are valid numbers
+                if (!isNaN(required) && !isNaN(current)) {
                     if (status === "Shortage") {
                         actionRequiredText = `Missing ${required - current} units.`;
                     } else if (status === "Critical Shortage") {
@@ -428,9 +424,11 @@ async function showShortageListModal() {
                         actionRequiredText = 'NILL';
                     }
                 } else {
-                    actionRequiredText = 'Quantity data unavailable/invalid.'; // Fallback for invalid numbers
+                    actionRequiredText = 'Quantity data unavailable/invalid.';
                 }
-                // --- END FIX FOR QUANTITY DISPLAY AND STATUS ---
+                // --- Debugging print for script.js ---
+                console.log(`Part: ${part.part_number}, SO: ${part.sale_order}, Req: ${required}, Curr: ${current}, Status: '${status}', Action: '${actionRequiredText}'`);
+                // --- End Debugging print ---
 
                 row.innerHTML = `
                     <td>${part.part_number || '--'}</td>
@@ -558,7 +556,7 @@ setInterval(() => {
             lastSearchTesterId: currentTesterId,
             lastSearchSaleOrders: currentSaleOrders,
             timestamp: new Date().toISOString(),
-            version: '2.0-all-parts-fix-final' // Updated version for auto-save
+            version: '2.0-all-parts-fix-final'
         };
         localStorage.setItem('hal_current_session', JSON.stringify(sessionData));
         console.log('Session auto-saved:', sessionData.jigNumber);
