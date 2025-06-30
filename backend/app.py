@@ -111,7 +111,7 @@ def get_jig_details(tester_jig_number):
     if jig_data:
         summary_info = {
             'testerJigNumber': jig_data['summary']['tester_jig_number'],
-            'topAssyNo': jig_data['summary']['top_assy_no']
+            'topAssyNo': str(jig_data['summary']['top_assy_no'])
         }
         # Return a list of all sale order numbers for this jig
         sale_orders_list = list(jig_data['sale_orders'].keys())
