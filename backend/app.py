@@ -32,7 +32,7 @@ testers_data_by_jig_and_so = {}
 def load_data():
     """
     Loads processed data, grouping it by tester_jig_number and sale_order.
-    Ensures all numeric values are standard Python ints/floats for JSON serialization.
+    Ensures all numeric and string values are standard Python types for JSON serialization.
     """
     global testers_data_by_jig_and_so
     testers_data_by_jig_and_so = {} # Clear existing data
@@ -40,10 +40,16 @@ def load_data():
         df = pd.read_csv(DATA_FILE)
         print(f"Raw data loaded: {len(df)} records from {DATA_FILE}")
 
-        # Explicitly convert numeric columns to Python native types before grouping
+        # Explicitly convert numeric columns to Python native types (int/float)
         for col in ['requiredQuantity', 'currentStock']:
             if col in df.columns:
                 df[col] = df[col].apply(lambda x: int(x) if pd.api.types.is_integer_dtype(type(x)) else float(x) if pd.api.types.is_float_dtype(type(x)) else x)
+        
+        # --- CRITICAL FIX: Ensure availability_status is always a clean string ---
+        if 'availability_status' in df.columns:
+            # Convert to string, strip whitespace, and replace NaN (from empty cells) with empty string.
+            df['availability_status'] = df['availability_status'].astype(str).str.strip().replace('nan', '', regex=False)
+        # --- END CRITICAL FIX ---
 
 
         for jig_name, jig_group in df.groupby('tester_jig_number'):
@@ -58,7 +64,7 @@ def load_data():
 
             for so_number, so_group in jig_group.groupby('sale_order'):
                 parts_list = so_group.to_dict(orient='records')
-                # Further ensure all values in parts_list are JSON serializable
+                
                 cleaned_parts_list = []
                 for part in parts_list:
                     cleaned_part = {}
@@ -69,7 +75,9 @@ def load_data():
                             cleaned_part[key] = float(value)
                         elif pd.isna(value):
                             cleaned_part[key] = None
-                        else:
+                        elif isinstance(value, str): # Ensure strings are stripped (especially from CSV read)
+                            cleaned_part[key] = value.strip()
+                        else: # Fallback for other types
                             cleaned_part[key] = value
                     cleaned_parts_list.append(cleaned_part)
                     

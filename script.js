@@ -4,8 +4,8 @@ const searchJigBtn = document.getElementById('searchJigBtn');
 
 const jigDetailsDisplaySection = document.getElementById('jigDetailsDisplay');
 const displayJigNumber = document.getElementById('displayJigNumber');
-const displaySaleOrders = document.getElementById('displaySaleOrders'); // Correctly named 'displaySaleOrders'
-const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // Corrected typo here
+const displaySaleOrders = document.getElementById('displaySaleOrders');
+const displayTopAssyNo = document.getElementById('displayTopAssyNo'); // FIX: Corrected typo
 const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
 
 const shortageListBtn = document.getElementById('shortageListBtn');
@@ -28,7 +28,7 @@ const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelB
 
 let currentTesterId = null;
 let currentSaleOrders = []; // Stores the list of Sale Orders for currentTesterId (for display)
-let currentJigAllPartsData = null; // IMPORTANT: Stores ALL parts data from /api/all_parts_for_jig/
+let currentJigAllPartsData = null; // IMPORTANT: Stores all parts data from /api/all_parts_for_jig/
 
 
 const API_BASE_URL = 'https://hal-jig-tracker.onrender.com/api'; // IMPORTANT: Your Render URL
@@ -300,7 +300,6 @@ async function searchJigDetails() {
                     if (status === "Shortage" || status === "Critical Shortage") {
                         isOverallLaunched = false;
                         firstShortageSaleOrder = part.sale_order; // Get the SO where shortage was found
-                        console.log(`Launching Status Debug: Shortage found in SO ${firstShortageSaleOrder}. Setting isOverallLaunched to false.`);
                         break; // Found a shortage, no need to check further parts
                     }
                 }
@@ -428,7 +427,6 @@ async function showShortageListModal() {
                 const required = Number(part.requiredQuantity);
                 const current = Number(part.currentStock);
 
-                // --- FIX FOR QUANTITY DISPLAY AND STATUS (REFINED) ---
                 if (!isNaN(required) && !isNaN(current)) {
                     if (status === "Shortage") {
                         actionRequiredText = `Missing ${required - current} units.`;
@@ -437,10 +435,10 @@ async function showShortageListModal() {
                     } else if (status === "Surplus") {
                         actionRequiredText = `Surplus of ${current - required} units.`;
                     } else if (status === "Adequate") {
-                        actionRequiredText = 'NILL'; // Shows NILL for adequate stock
+                        actionRequiredText = 'NILL';
                     }
                 } else {
-                    actionRequiredText = 'Quantity data unavailable/invalid.'; // Fallback for invalid numbers
+                    actionRequiredText = 'Quantity data unavailable/invalid.';
                 }
                 // --- Debugging print for script.js ---
                 console.log(`Frontend Part Display: ${part.part_number}, SO: ${part.sale_order}, Req: ${required}, Curr: ${current}, Status: '${status}', Action: '${actionRequiredText}'`);
