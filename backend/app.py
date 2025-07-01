@@ -45,9 +45,9 @@ def load_data():
             if col in df.columns:
                 df[col] = df[col].apply(lambda x: int(x) if pd.api.types.is_integer_dtype(type(x)) else float(x) if pd.api.types.is_float_dtype(type(x)) else x)
         
-        # --- CRITICAL FIX: Ensure availability_status is always a clean string ---
+        # --- CRITICAL FIX: Ensure 'availability_status' is always a clean string ---
         if 'availability_status' in df.columns:
-            # Convert to string, strip whitespace, and replace NaN (from empty cells) with empty string.
+            # Convert to string, strip whitespace, and replace any NaN (from empty cells in CSV) with empty string.
             df['availability_status'] = df['availability_status'].astype(str).str.strip().replace('nan', '', regex=False)
         # --- END CRITICAL FIX ---
 
@@ -74,10 +74,10 @@ def load_data():
                         elif pd.api.types.is_float_dtype(type(value)) or isinstance(value, float):
                             cleaned_part[key] = float(value)
                         elif pd.isna(value):
-                            cleaned_part[key] = None
-                        elif isinstance(value, str): # Ensure strings are stripped (especially from CSV read)
-                            cleaned_part[key] = value.strip()
-                        else: # Fallback for other types
+                            cleaned_part[key] = None # For general NaN values
+                        elif isinstance(value, str):
+                            cleaned_part[key] = value.strip() # Ensure strings are stripped (especially from CSV read)
+                        else:
                             cleaned_part[key] = value
                     cleaned_parts_list.append(cleaned_part)
                     
