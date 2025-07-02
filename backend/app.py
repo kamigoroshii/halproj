@@ -66,7 +66,7 @@ def load_data():
 # Load data on application startup
 load_data()
 
-# --- API Routes (Reverted to original working state) ---
+# --- API Routes ---
 
 @app.route('/')
 def serve_index():

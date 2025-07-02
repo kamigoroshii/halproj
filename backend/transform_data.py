@@ -27,8 +27,7 @@ OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
 
 def transform_data(input_configs, output_path):
     """
-    Reads multiple Excel files, restoring the original logic for data creation
-    and status calculation.
+    Reads multiple Excel files, using original logic and the new "Not Launched" status.
     """
     print("Attempting to transform data from multiple sources.")
     print(f"Output will be saved to: {output_path}")
@@ -44,7 +43,7 @@ def transform_data(input_configs, output_path):
             df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
-            # --- Restored Original Logic ---
+            # --- Robust Column Handling ---
             part_no_col = next((col for col in ['subassemblyorpartno', 'partno'] if col in df.columns), 'description')
             df['part_number'] = df.get(part_no_col, 'N/A').astype(str)
 
@@ -77,11 +76,12 @@ def transform_data(input_configs, output_path):
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
-            # --- START: Reverted Status Logic ---
+            # --- START: Updated Status Logic ---
+            # If ANY part for a jig has a 'Shortage', the entire jig's status is 'Not Launched'.
             df['status'] = df.groupby('tester_jig_number')['availability_status'].transform(
-                lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
+                lambda x: 'Not Launched' if (x == 'Shortage').any() else 'Ready for Launch'
             )
-            # --- END: Reverted Status Logic ---
+            # --- END: Updated Status Logic ---
 
             all_dfs.append(df)
 

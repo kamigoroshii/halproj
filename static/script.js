@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) clearBtn.addEventListener('click', () => clearForm());
     if (shortageListBtn) shortageListBtn.addEventListener('click', openPartsListModal);
     if (downloadAllPartsExcelBtn) downloadAllPartsExcelBtn.addEventListener('click', downloadAllPartsExcel);
-    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', sendTelegramAlert);
+    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', () => sendTelegramAlert(false)); // False for manual click
 
     if (closeShortageModalBtn) closeShortageModalBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
     if (shortageModalOkBtn) shortageModalOkBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
             displayTopAssyNo.textContent = data.top_assy_no || 'N/A';
             displayLaunchingStatus.textContent = data.status || 'Status Unknown';
 
-            if (data.status && data.status.toLowerCase().includes('delayed')) {
+            if (data.status && data.status.toLowerCase() === 'not launched') {
                 displayLaunchingStatus.parentElement.className = 'status-indicator-box status-delayed';
                 if (statusIcon) statusIcon.className = 'fas fa-exclamation-triangle';
             } else {
@@ -90,6 +90,14 @@ document.addEventListener('DOMContentLoaded', () => {
             jigDetailsDisplaySection.classList.add('fade-in');
             
             await fetchAllPartsForJig();
+
+            // --- START: Automatic Telegram Alert Logic ---
+            if (data.status === 'Not Launched') {
+                console.log("Status is 'Not Launched'. Automatically sending Telegram alert.");
+                await sendTelegramAlert(true); // Pass 'true' for automatic alert
+            }
+            // --- END: Automatic Telegram Alert Logic ---
+
         } catch (error) {
             console.error('Error fetching jig details:', error);
             showInfoModal('Search Failed', `Could not find details. Reason: ${error.message}`, true);
@@ -154,13 +162,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function sendTelegramAlert() {
+    async function sendTelegramAlert(isAutomatic = false) {
         if (!currentJigData) {
             showInfoModal('Error', 'Please search for a Jig Number first.', true);
             return;
         }
 
-        showLoading(true);
+        if (!isAutomatic) {
+            showLoading(true);
+        }
 
         const jigNumber = currentJigData.tester_jig_number;
         const status = currentJigData.status;
@@ -172,15 +182,16 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        const alertType = isAutomatic ? "Automatic Alert" : "Manual Alert";
         const message = `
-*HAL Alert: Tester Jig Status*
+*${alertType}: Tester Jig Status*
 ------------------------------------
 *Jig Number:* \`${jigNumber}\`
 *Overall Status:* ${status}
 *Total Shortages:* ${shortageCount}
 *Official In-Charge:* ${currentJigData.officialIncharge || 'N/A'}
 ------------------------------------
-This is a manual alert triggered by a user.
+This alert was triggered ${isAutomatic ? 'automatically due to shortage' : 'manually by a user'}.
         `;
 
         try {
@@ -193,13 +204,32 @@ This is a manual alert triggered by a user.
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || 'Failed to send alert.');
             
-            showInfoModal('Success', result.message);
+            if (!isAutomatic) {
+                showInfoModal('Success', result.message);
+            } else {
+                console.log("Automatic Telegram alert sent successfully.");
+                showToast("Automatic 'Not Launched' alert sent to Telegram.");
+            }
         } catch (error) {
             console.error('Error sending Telegram alert:', error);
-            showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
+            if (!isAutomatic) {
+                showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
+            }
         } finally {
-            showLoading(false);
+            if (!isAutomatic) {
+                showLoading(false);
+            }
         }
+    }
+    
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
     }
 
     function downloadAllPartsExcel() {
