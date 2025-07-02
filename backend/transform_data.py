@@ -2,14 +2,14 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import sys
 
 print("Transform script started.")
 
-# --- START OF PATH CORRECTION ---
-
-# Get the directory where this script (transform_data.py) is located (e.g., /.../backend)
+# --- Path Correction ---
+# Get the directory where this script is located (e.g., /.../backend)
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-# Get the project's root directory, which is one level up from the backend directory
+# Get the project's root directory, which is one level up
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 
 # --- Configuration ---
@@ -21,15 +21,13 @@ if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
     print(f"Created data directory at: {DATA_DIR}")
 
-# Define input files and their corresponding sale orders, using the corrected DATA_DIR
+# Define input files using the corrected DATA_DIR
 INPUT_FILES_CONFIG = [
     {'path': os.path.join(DATA_DIR, 'merged_assembly_parts_list (1).xlsx'), 'sale_order': '04882'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_1.xlsx'), 'sale_order': '04883'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_2.xlsx'), 'sale_order': '04884'}
 ]
 OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
-
-# --- END OF PATH CORRECTION ---
 
 
 def transform_data(input_configs, output_path):
@@ -49,12 +47,24 @@ def transform_data(input_configs, output_path):
 
         try:
             df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
-            # Sanitize headers: remove spaces and convert to lowercase
+            # Sanitize headers
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
-            # --- START OF CORRECTED LOGIC ---
-            df['requiredQuantity'] = pd.to_numeric(df.get('requiredqty', 0), errors='coerce').fillna(0)
-            df['currentStock'] = pd.to_numeric(df.get('stockqty', 0), errors='coerce').fillna(0)
+            # --- START OF ROBUST COLUMN HANDLING FIX ---
+            # Check if 'requiredqty' column exists. If not, create it and fill with 0.
+            if 'requiredqty' in df.columns:
+                df['requiredQuantity'] = pd.to_numeric(df['requiredqty'], errors='coerce').fillna(0)
+            else:
+                print(f"Warning: 'requiredqty' column not found in {file_basename}. Defaulting to 0.")
+                df['requiredQuantity'] = 0
+
+            # Check if 'stockqty' column exists. If not, create it and fill with 0.
+            if 'stockqty' in df.columns:
+                df['currentStock'] = pd.to_numeric(df['stockqty'], errors='coerce').fillna(0)
+            else:
+                print(f"Warning: 'stockqty' column not found in {file_basename}. Defaulting to 0.")
+                df['currentStock'] = 0
+            # --- END OF ROBUST COLUMN HANDLING FIX ---
 
             conditions = [
                 (df['requiredQuantity'] <= 0),
@@ -68,7 +78,6 @@ def transform_data(input_configs, output_path):
             df['status'] = df.groupby('testerjigno')['availability_status'].transform(
                 lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
             )
-            # --- END OF CORRECTED LOGIC ---
 
             df['sale_order'] = sale_order
             df.rename(columns={
@@ -85,11 +94,12 @@ def transform_data(input_configs, output_path):
         except FileNotFoundError:
             print(f"Error: Input XLSX file not found at {file_path}. Skipping this file.")
         except Exception as e:
-            print(f"An unexpected error occurred processing {file_basename}: {e}")
+            print(f"FATAL ERROR processing {file_basename}: {e}")
+            sys.exit(1) # Exit with an error code to fail the build
 
     if not all_dfs:
-        print("No dataframes were successfully processed. Output CSV will not be created.")
-        return
+        print("FATAL ERROR: No dataframes were successfully processed. Output CSV will not be created.")
+        sys.exit(1) # Exit with an error code to fail the build
 
     final_combined_df = pd.concat(all_dfs, ignore_index=True)
 
