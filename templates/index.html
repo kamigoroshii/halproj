@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HAL Tester Jig Tracking System</title>
+    <!-- Correct path for deployment -->
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
     <header class="header">
-        <!-- Header content remains the same -->
         <div class="header-content">
             <div class="company-info">
                 <img src="/static/halogo.jpg" alt="HAL Logo" class="header-logo-img">
@@ -20,20 +20,14 @@
                 </div>
             </div>
             <div class="header-status">
-                <div class="status-indicator">
-                    <span class="status-dot"></span>
-                    <span>System Operational</span>
-                </div>
-                <div class="hal-emblem">
-                    <i class="fas fa-fighter-jet"></i>
-                </div>
+                <div class="status-indicator"><span class="status-dot"></span><span>System Operational</span></div>
+                <div class="hal-emblem"><i class="fas fa-fighter-jet"></i></div>
             </div>
         </div>
     </header>
 
     <main class="main-container">
         <div class="card search-card">
-            <!-- Search card content remains the same -->
             <div class="card-header">
                 <h2><i class="fas fa-search"></i> Tester Jig Search</h2>
             </div>
@@ -61,33 +55,34 @@
             </div>
             <div class="card-body">
                 <div class="details-grid">
-                    <div class="detail-item"><span class="detail-label"><i class="fas fa-tag"></i> Jig Number</span><span id="displayJigNumber" class="detail-value"></span></div>
-                    <div class="detail-item"><span class="detail-label"><i class="fas fa-file-invoice"></i> Sale Orders</span><span id="displaySaleOrders" class="detail-value"></span></div>
-                    <div class="detail-item"><span class="detail-label"><i class="fas fa-cogs"></i> Top Assy No.</span><span id="displayTopAssyNo" class="detail-value"></span></div>
+                    <div class="detail-item"><span class="detail-label">Jig Number</span><span id="displayJigNumber" class="detail-value"></span></div>
+                    <div class="detail-item"><span class="detail-label">Sale Orders</span><span id="displaySaleOrders" class="detail-value"></span></div>
+                    <div class="detail-item"><span class="detail-label">Top Assy No.</span><span id="displayTopAssyNo" class="detail-value"></span></div>
                 </div>
             </div>
             <div class="card-footer">
-                <button id="viewAllPartsBtn" class="btn btn-primary"><i class="fas fa-list-ul"></i><span>View All Parts</span></button>
+                <button id="shortageListBtn" class="btn btn-primary"><i class="fas fa-list-ul"></i><span>View Parts List</span></button>
                 <button id="sendTelegramAlertBtn" class="btn btn-warning"><i class="fab fa-telegram-plane"></i><span>Send Telegram Alert</span></button>
                 <button id="downloadAllPartsExcelBtn" class="btn btn-success"><i class="fas fa-file-excel"></i><span>Download Excel</span></button>
             </div>
         </div>
     </main>
 
-    <!-- All Parts List Modal -->
-    <div id="partsListModal" class="modal-overlay hidden">
+    <!-- Modal for Parts List (originally shortage list) -->
+    <div id="shortageListModal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 id="partsListModalTitle"><i class="fas fa-boxes"></i> All Parts List</h3>
-                <button id="closePartsListModal" class="close-btn">&times;</button>
+                <h3><i class="fas fa-boxes"></i> Parts List</h3>
+                <button id="closeShortageModal" class="close-btn">&times;</button>
             </div>
             <div class="modal-body">
                  <div class="sale-order-selector">
-                    <label for="partsListSaleOrderSelect">Select Sale Order:</label>
-                    <select id="partsListSaleOrderSelect"></select>
+                    <label for="shortageSaleOrderSelect">Select Sale Order:</label>
+                    <select id="shortageSaleOrderSelect"></select>
                 </div>
+                <p id="noShortageMessage" class="hidden">No parts found for this selection.</p>
                 <div class="table-container">
-                    <table class="parts-table">
+                    <table class="shortage-table">
                         <thead>
                             <tr>
                                 <th>Part Number</th>
@@ -97,12 +92,12 @@
                                 <th>Status</th>
                             </tr>
                         </thead>
-                        <tbody id="partsTableBody"></tbody>
+                        <tbody id="shortageTableBody"></tbody>
                     </table>
                 </div>
             </div>
             <div class="modal-actions">
-                 <button id="partsListModalOk" class="btn btn-primary"><i class="fas fa-check"></i><span>OK</span></button>
+                 <button id="shortageModalOk" class="btn btn-primary"><i class="fas fa-check"></i><span>OK</span></button>
             </div>
         </div>
     </div>
@@ -118,7 +113,6 @@
 
     <!-- Loading Spinner -->
     <div id="loadingSpinner" class="loading-spinner hidden">
-        <!-- Spinner content remains the same -->
         <div class="spinner-container">
             <div class="spinner"><div class="spinner-inner"><i class="fas fa-fighter-jet"></i></div></div>
             <div class="loading-text"><h3>Processing Request</h3><p>Accessing HAL database...</p></div>
@@ -126,13 +120,13 @@
     </div>
 
     <footer class="footer">
-        <!-- Footer content remains the same -->
         <div class="footer-content">
             <div class="footer-logo"><img src="/static/halogo.jpg" alt="HAL"><span>HAL</span></div>
             <div class="footer-text"><p>© 2024 Hindustan Aeronautics Limited. All rights reserved.</p><p>Tester Delivery Tracking System v2.0</p></div>
         </div>
     </footer>
 
+    <!-- Correct path for deployment -->
     <script src="/static/script.js"></script>
 </body>
 </html>
