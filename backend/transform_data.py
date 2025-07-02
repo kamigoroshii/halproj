@@ -50,22 +50,19 @@ def transform_data(input_configs, output_path):
             # Sanitize headers
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
-            # --- START OF ROBUST COLUMN HANDLING FIX ---
-            # Check if 'requiredqty' column exists. If not, create it and fill with 0.
+            # --- Robust Column Handling ---
             if 'requiredqty' in df.columns:
                 df['requiredQuantity'] = pd.to_numeric(df['requiredqty'], errors='coerce').fillna(0)
             else:
                 print(f"Warning: 'requiredqty' column not found in {file_basename}. Defaulting to 0.")
                 df['requiredQuantity'] = 0
 
-            # Check if 'stockqty' column exists. If not, create it and fill with 0.
             if 'stockqty' in df.columns:
                 df['currentStock'] = pd.to_numeric(df['stockqty'], errors='coerce').fillna(0)
             else:
                 print(f"Warning: 'stockqty' column not found in {file_basename}. Defaulting to 0.")
                 df['currentStock'] = 0
-            # --- END OF ROBUST COLUMN HANDLING FIX ---
-
+            
             conditions = [
                 (df['requiredQuantity'] <= 0),
                 (df['currentStock'] == df['requiredQuantity']),
@@ -75,9 +72,17 @@ def transform_data(input_configs, output_path):
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
-            df['status'] = df.groupby('testerjigno')['availability_status'].transform(
-                lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
-            )
+            # --- START OF FINAL FIX for 'testerjigno' KeyError ---
+            # Check if 'testerjigno' column exists before grouping.
+            if 'testerjigno' in df.columns:
+                df['status'] = df.groupby('testerjigno')['availability_status'].transform(
+                    lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
+                )
+            else:
+                # If the column is missing, we cannot determine the overall status, so we set a default.
+                print(f"Warning: 'testerjigno' column not found in {file_basename}. Cannot determine overall launch status. Defaulting to 'Status Unknown'.")
+                df['status'] = 'Status Unknown'
+            # --- END OF FINAL FIX ---
 
             df['sale_order'] = sale_order
             df.rename(columns={
