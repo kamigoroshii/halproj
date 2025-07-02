@@ -37,28 +37,19 @@ def load_data():
     global testers_data_by_jig_and_so
     testers_data_by_jig_and_so = {} # Clear existing data
     try:
-        # Read CSV, explicitly specify dtype for potentially problematic columns
-        # This helps pandas infer types correctly and prevents NaN/None issues with strings
-        dtype_spec = {
-            'requiredQuantity': int,
-            'currentStock': int,
-            'availability_status': str # Force this column to be string
-        }
-        df = pd.read_csv(DATA_FILE, dtype=dtype_spec) # Use dtype_spec here
+        df = pd.read_csv(DATA_FILE)
         print(f"Raw data loaded: {len(df)} records from {DATA_FILE}")
 
-        # --- CRITICAL FIX: Ensure availability_status is always a clean string (even after read_csv) ---
-        if 'availability_status' in df.columns:
-            # Replace any NaN values with an empty string, then strip whitespace.
-            # This handles potential NaN if csv had truly blank cells even after transform.py
-            df['availability_status'] = df['availability_status'].fillna('').astype(str).str.strip()
-        # --- END CRITICAL FIX ---
-
-        # Explicitly convert numeric columns again to Python native types (int/float)
-        # This is a safeguard, as dtype=spec should handle it, but doesn't hurt.
+        # Explicitly convert numeric columns to Python native types (int/float)
         for col in ['requiredQuantity', 'currentStock']:
             if col in df.columns:
                 df[col] = df[col].apply(lambda x: int(x) if pd.api.types.is_integer_dtype(type(x)) else float(x) if pd.api.types.is_float_dtype(type(x)) else x)
+        
+        # --- CRITICAL FIX: Ensure 'availability_status' is always a clean string ---
+        if 'availability_status' in df.columns:
+            # Convert to string, strip whitespace, and replace any NaN (from empty cells in CSV) with empty string.
+            df['availability_status'] = df['availability_status'].astype(str).str.strip().replace('nan', '', regex=False)
+        # --- END CRITICAL FIX ---
 
 
         for jig_name, jig_group in df.groupby('tester_jig_number'):
@@ -78,16 +69,16 @@ def load_data():
                 for part in parts_list:
                     cleaned_part = {}
                     for key, value in part.items():
-                        # Direct assignment is usually fine if df[col].apply() handled it
-                        # but this re-iterates for safety/completeness
-                        if pd.isna(value):
-                            cleaned_part[key] = None
-                        elif isinstance(value, (int, float)):
-                            cleaned_part[key] = value # Already native Python types from df[col].apply above
+                        if pd.api.types.is_integer_dtype(type(value)) or isinstance(value, int):
+                            cleaned_part[key] = int(value)
+                        elif pd.api.types.is_float_dtype(type(value)) or isinstance(value, float):
+                            cleaned_part[key] = float(value)
+                        elif pd.isna(value):
+                            cleaned_part[key] = None # For general NaN values
                         elif isinstance(value, str):
-                            cleaned_part[key] = value.strip() # Ensure strings are stripped
+                            cleaned_part[key] = value.strip() # Ensure strings are stripped (especially from CSV read)
                         else:
-                            cleaned_part[key] = str(value).strip() # Cautious conversion for other types
+                            cleaned_part[key] = value
                     cleaned_parts_list.append(cleaned_part)
                     
                 testers_data_by_jig_and_so[jig_name.lower()]['sale_orders'][str(so_number)] = cleaned_parts_list

@@ -535,8 +535,8 @@ jigNumberInput.addEventListener('keypress', (e) => {
 searchJigBtn.addEventListener('click', searchJigDetails);
 
 shortageListBtn.addEventListener('click', showShortageListModal);
-closeShortageModalBtn.addEventListener('click', hideShortageModalBtn);
-shortageModalOkBtn.addEventListener('click', hideShortageModalBtn);
+closeShortageModalBtn.addEventListener('click', hideShortageListModal);
+shortageModalOkBtn.addEventListener('click', hideShortageListModal);
 
 closeModalBtn.addEventListener('click', closeModalFunction);
 modalOkBtn.addEventListener('click', closeModalFunction);
