@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const shortageListBtn = document.getElementById('shortageListBtn');
     const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelBtn');
-    const sendTelegramAlertBtn = document.getElementById('sendTelegramAlertBtn'); // Assuming this ID exists in your final HTML
+    const sendTelegramAlertBtn = document.getElementById('sendTelegramAlertBtn');
 
     const shortageListModal = document.getElementById('shortageListModal');
     const closeShortageModalBtn = document.getElementById('closeShortageModal');
@@ -32,10 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- State Management ---
     let currentJigData = null;
-    let allPartsData = {}; // This will store all parts data, grouped by sale order
+    let allPartsData = {};
 
     // --- Event Listeners ---
-    // These listeners are now safe because they are inside DOMContentLoaded
     if (searchJigBtn) searchJigBtn.addEventListener('click', searchJigDetails);
     if (jigNumberInput) jigNumberInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') searchJigDetails();
@@ -44,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) clearBtn.addEventListener('click', () => clearForm());
     if (shortageListBtn) shortageListBtn.addEventListener('click', openPartsListModal);
     if (downloadAllPartsExcelBtn) downloadAllPartsExcelBtn.addEventListener('click', downloadAllPartsExcel);
-    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', sendTelegramAlert);
+    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', () => sendTelegramAlert(false)); // Manual call
 
     if (closeShortageModalBtn) closeShortageModalBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
     if (shortageModalOkBtn) shortageModalOkBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
@@ -52,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modalOkBtn) modalOkBtn.addEventListener('click', () => alertModal.classList.add('hidden'));
     if (shortageSaleOrderSelect) shortageSaleOrderSelect.addEventListener('change', displaySelectedPartsList);
 
-    // --- Core Functions (Restored and Corrected) ---
+    // --- Core Functions ---
 
     async function searchJigDetails() {
         const jigNumber = jigNumberInput.value.trim();
@@ -65,7 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
         clearForm(true);
 
         try {
-            // FIX: Using the corrected API endpoint structure with query parameters
             const response = await fetch(`/api/jig_details?jig_number=${encodeURIComponent(jigNumber)}`);
             if (!response.ok) {
                 const errorData = await response.json();
@@ -75,14 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             currentJigData = data;
 
-            // Populate display fields with data from the backend
             displayJigNumber.textContent = data.tester_jig_number || 'N/A';
             displaySaleOrders.textContent = data.sale_orders.join(', ') || 'N/A';
             displayTopAssyNo.textContent = data.top_assy_no || 'N/A';
             displayLaunchingStatus.textContent = data.status || 'Status Unknown';
 
-            // Set status indicator color based on the status text
-            if (data.status && data.status.toLowerCase().includes('delayed')) {
+            if (data.status && data.status.toLowerCase() === 'not launched') {
                 displayLaunchingStatus.parentElement.className = 'status-indicator-box status-delayed';
                 if (statusIcon) statusIcon.className = 'fas fa-exclamation-triangle';
             } else {
@@ -93,8 +89,17 @@ document.addEventListener('DOMContentLoaded', () => {
             jigDetailsDisplaySection.classList.remove('hidden');
             jigDetailsDisplaySection.classList.add('fade-in');
             
-            // Pre-fetch all parts data for this jig in the background
+            // Pre-fetch all parts data for this jig
             await fetchAllPartsForJig();
+
+            // --- START: Automatic Telegram Alert Logic ---
+            if (data.status === 'Not Launched') {
+                console.log("Status is 'Not Launched'. Automatically sending Telegram alert.");
+                // The 'true' flag indicates this is an automatic alert.
+                await sendTelegramAlert(true);
+            }
+            // --- END: Automatic Telegram Alert Logic ---
+
         } catch (error) {
             console.error('Error fetching jig details:', error);
             showInfoModal('Search Failed', `Could not find details. Reason: ${error.message}`, true);
@@ -109,35 +114,23 @@ document.addEventListener('DOMContentLoaded', () => {
         allPartsData = {};
 
         try {
-            // FIX: Calling the correct, existing API endpoint
             const response = await fetch(`/api/all_parts_for_jig?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`);
-            if (!response.ok) {
-                // Handle cases where the server returns an error page instead of JSON
-                const text = await response.text();
-                throw new Error(`Server responded with status ${response.status}. Response: ${text.substring(0, 100)}`);
-            }
+            if (!response.ok) throw new Error('Server responded with an error fetching parts.');
             
             const allParts = await response.json();
             
-            // Group parts by sale order for easy access later
             currentJigData.sale_orders.forEach(so => {
                 allPartsData[so] = allParts.filter(p => p.sale_order === so);
             });
-            console.log("All parts data has been pre-fetched and is ready.");
+            console.log("All parts data has been pre-fetched.");
         } catch (error) {
             console.error("Could not pre-fetch parts data:", error);
-            showInfoModal('Data Error', 'Could not load the detailed parts list. The backend might have an issue.', true);
         }
     }
 
     function openPartsListModal() {
-        if (!currentJigData) {
-            showInfoModal('Error', 'Please search for a Jig first.', true);
-            return;
-        }
-        
+        if (!currentJigData) return;
         shortageSaleOrderSelect.innerHTML = currentJigData.sale_orders.map(so => `<option value="${so}">${so}</option>`).join('');
-        
         displaySelectedPartsList();
         shortageListModal.classList.remove('hidden');
     }
@@ -150,17 +143,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function populatePartsTable(partsData) {
         shortageTableBody.innerHTML = ''; 
-
         if (!partsData || partsData.length === 0) {
             noShortageMessage.classList.remove('hidden');
             shortageTableBody.parentElement.classList.add('hidden');
             return;
         }
-
         noShortageMessage.classList.add('hidden');
         shortageTableBody.parentElement.classList.remove('hidden');
-
-        // This loop now displays ALL parts, with color-coded status
         partsData.forEach(item => {
             const status = (item.availability_status || 'unknown').toLowerCase().replace(/\s+/g, '-');
             const row = document.createElement('tr');
@@ -175,10 +164,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function sendTelegramAlert() {
+    async function sendTelegramAlert(isAutomatic = false) {
         if (!currentJigData) {
             showInfoModal('Error', 'Please search for a Jig Number first.', true);
             return;
+        }
+
+        // Don't show the loading spinner again if it's an automatic send
+        if (!isAutomatic) {
+            showLoading(true);
         }
 
         const jigNumber = currentJigData.tester_jig_number;
@@ -202,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
 This is an automated notification.
         `;
 
-        showLoading(true);
         try {
             const response = await fetch('/api/send_telegram_alert', {
                 method: 'POST',
@@ -213,13 +206,35 @@ This is an automated notification.
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || 'Failed to send alert.');
             
-            showInfoModal('Success', result.message);
+            // Only show the big modal for manual clicks
+            if (!isAutomatic) {
+                showInfoModal('Success', result.message);
+            } else {
+                console.log("Automatic Telegram alert sent successfully.");
+                // Optionally, show a small, temporary notification (a "toast")
+                showToast("Automatic 'Not Launched' alert sent to Telegram.");
+            }
         } catch (error) {
             console.error('Error sending Telegram alert:', error);
-            showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
+            if (!isAutomatic) {
+                showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
+            }
         } finally {
-            showLoading(false);
+            if (!isAutomatic) {
+                showLoading(false);
+            }
         }
+    }
+    
+    // A simple toast notification function
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
     }
 
     function downloadAllPartsExcel() {
@@ -231,7 +246,6 @@ This is an automated notification.
         window.open(url, '_blank');
     }
 
-    // --- UI Helper Functions (from original logic) ---
     function clearForm(keepInput = false) {
         if (!keepInput) jigNumberInput.value = '';
         jigDetailsDisplaySection.classList.add('hidden');
@@ -241,7 +255,7 @@ This is an automated notification.
     }
 
     function showLoading(show) {
-        loadingSpinner.classList.toggle('hidden', !show);
+        if(loadingSpinner) loadingSpinner.classList.toggle('hidden', !show);
     }
 
     function showInfoModal(title, message, isError = false) {
@@ -251,3 +265,26 @@ This is an automated notification.
         if (alertModal) alertModal.classList.remove('hidden');
     }
 });
+
+// Add this CSS to your style.css file for the toast notification
+/*
+.toast-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--primary-blue);
+    color: white;
+    padding: 1rem 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 2000;
+    opacity: 0;
+    animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0; bottom: 0; }
+    10%, 90% { opacity: 1; bottom: 20px; }
+}
+*/

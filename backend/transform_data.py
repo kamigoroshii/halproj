@@ -7,21 +7,16 @@ import sys
 print("Transform script started.")
 
 # --- Path Correction ---
-# Get the directory where this script is located (e.g., /.../backend)
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-# Get the project's root directory, which is one level up
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 
 # --- Configuration ---
-# Point to the 'data' folder at the project root
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
-# Ensure the data directory exists
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
     print(f"Created data directory at: {DATA_DIR}")
 
-# Define input files using the corrected DATA_DIR
 INPUT_FILES_CONFIG = [
     {'path': os.path.join(DATA_DIR, 'merged_assembly_parts_list (1).xlsx'), 'sale_order': '04882'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_1.xlsx'), 'sale_order': '04883'},
@@ -32,8 +27,7 @@ OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
 
 def transform_data(input_configs, output_path):
     """
-    Reads multiple Excel files, cleans and transforms the data, calculates
-    availability and launch status, and saves it to a single CSV file.
+    Reads multiple Excel files, using original logic and new status naming.
     """
     print("Attempting to transform data from multiple sources.")
     print(f"Output will be saved to: {output_path}")
@@ -47,11 +41,9 @@ def transform_data(input_configs, output_path):
 
         try:
             df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
-            # Sanitize headers
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
             # --- Robust Column Handling ---
-            # Restore original logic for creating columns if they don't exist
             part_no_col = next((col for col in ['subassemblyorpartno', 'partno'] if col in df.columns), 'description')
             df['part_number'] = df.get(part_no_col, 'N/A').astype(str)
 
@@ -84,9 +76,12 @@ def transform_data(input_configs, output_path):
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
+            # --- START: Updated Status Logic ---
+            # If ANY part for a jig has a 'Shortage', the entire jig's status is 'Not Launched'.
             df['status'] = df.groupby('tester_jig_number')['availability_status'].transform(
-                lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
+                lambda x: 'Not Launched' if (x == 'Shortage').any() else 'Ready for Launch'
             )
+            # --- END: Updated Status Logic ---
 
             all_dfs.append(df)
 
@@ -114,7 +109,6 @@ def transform_data(input_configs, output_path):
     print(f"\nSuccessfully transformed and combined data and saved to: {output_path}")
 
 
-# This block ensures the transform_data function is called only when the script is run directly.
 if __name__ == '__main__':
     transform_data(INPUT_FILES_CONFIG, OUTPUT_CSV)
     print("\nScript finished.")
