@@ -5,24 +5,31 @@ import re
 
 print("Transform script started.")
 
+# --- START OF PATH CORRECTION ---
+
+# Get the directory where this script (transform_data.py) is located (e.g., /.../backend)
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the project's root directory, which is one level up from the backend directory
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
+
 # --- Configuration ---
-# Assumes the script is in the root project folder.
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
+# Point to the 'data' folder at the project root
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
 # Ensure the data directory exists
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
     print(f"Created data directory at: {DATA_DIR}")
 
-# Define input files and their corresponding sale orders.
-# Place your Excel files inside the 'data' folder.
+# Define input files and their corresponding sale orders, using the corrected DATA_DIR
 INPUT_FILES_CONFIG = [
     {'path': os.path.join(DATA_DIR, 'merged_assembly_parts_list (1).xlsx'), 'sale_order': '04882'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_1.xlsx'), 'sale_order': '04883'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_2.xlsx'), 'sale_order': '04884'}
 ]
 OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
+
+# --- END OF PATH CORRECTION ---
 
 
 def transform_data(input_configs, output_path):
@@ -46,12 +53,9 @@ def transform_data(input_configs, output_path):
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
             # --- START OF CORRECTED LOGIC ---
-
-            # Convert quantity columns to numeric, coercing errors to NaN, then filling with 0.
             df['requiredQuantity'] = pd.to_numeric(df.get('requiredqty', 0), errors='coerce').fillna(0)
             df['currentStock'] = pd.to_numeric(df.get('stockqty', 0), errors='coerce').fillna(0)
 
-            # Correctly ordered conditions for availability status calculation
             conditions = [
                 (df['requiredQuantity'] <= 0),
                 (df['currentStock'] == df['requiredQuantity']),
@@ -61,16 +65,12 @@ def transform_data(input_configs, output_path):
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
-            # Group by jig number to determine the overall launch status for all parts of that jig.
-            # If ANY part for a jig has a 'Shortage', the entire jig's status is 'Launch Delayed'.
             df['status'] = df.groupby('testerjigno')['availability_status'].transform(
                 lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
             )
-
             # --- END OF CORRECTED LOGIC ---
 
             df['sale_order'] = sale_order
-            # Rename columns to a consistent format for the backend
             df.rename(columns={
                 'testerid': 'testerId',
                 'testerjigno': 'tester_jig_number',
@@ -93,22 +93,18 @@ def transform_data(input_configs, output_path):
 
     final_combined_df = pd.concat(all_dfs, ignore_index=True)
 
-    # Define the final set of columns to ensure consistency in the output CSV
     final_cols = [
         'testerId', 'tester_jig_number', 'sale_order', 'top_assy_no', 'part_number', 'unitName',
         'requiredQuantity', 'currentStock', 'availability_status', 'officialIncharge', 'status'
     ]
-    # Ensure all final columns exist, filling missing ones with None
     for col in final_cols:
         if col not in final_combined_df.columns:
             final_combined_df[col] = None
 
-    # Save the final dataframe with only the specified columns
     final_combined_df[final_cols].to_csv(output_path, index=False, encoding='utf-8')
     print(f"\nSuccessfully transformed and combined data and saved to: {output_path}")
 
 
 if __name__ == '__main__':
-    # This allows the script to be run directly from the command line
     transform_data(INPUT_FILES_CONFIG, OUTPUT_CSV)
     print("\nScript finished.")

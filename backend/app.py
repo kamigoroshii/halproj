@@ -9,11 +9,18 @@ from dotenv import load_dotenv
 # Load environment variables from a .env file for local development
 load_dotenv()
 
+# --- START OF PATH CORRECTION ---
+
+# Get the directory where this script (app.py) is located (e.g., /.../backend)
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the project's root directory, which is one level up from the backend directory
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
+
 # --- Flask App Initialization for Production ---
-# Assumes 'templates' and 'static' folders are in the same directory as app.py
+# Point Flask to the correct 'static' and 'templates' folders at the project root
 app = Flask(__name__,
-            static_folder='static',
-            template_folder='templates')
+            static_folder=os.path.join(PROJECT_ROOT, 'static'),
+            template_folder=os.path.join(PROJECT_ROOT, 'templates'))
 
 CORS(app)
 
@@ -21,8 +28,11 @@ CORS(app)
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-# Corrected data file path, assuming a 'data' folder in the project root
-DATA_FILE = os.path.join(os.path.dirname(__file__), 'data', 'processed_testers_data.csv')
+# Corrected data file path, pointing to the 'data' folder at the project root
+DATA_FILE = os.path.join(PROJECT_ROOT, 'data', 'processed_testers_data.csv')
+
+# --- END OF PATH CORRECTION ---
+
 
 # In-memory data store
 testers_data_by_jig_and_so = {}
@@ -38,40 +48,30 @@ def load_data():
         df = pd.read_csv(DATA_FILE)
 
         # --- START OF DATA SANITIZATION FIX ---
-
-        # Define columns that must be strings to avoid issues with NaN, None, etc.
         string_cols = ['availability_status', 'status', 'part_number', 'unitName', 'officialIncharge', 'tester_jig_number', 'sale_order', 'testerId', 'top_assy_no']
-        
-        # Fill any potential NaN (blank) values in these columns with an empty string
         for col in string_cols:
             if col in df.columns:
                 df[col] = df[col].fillna('')
-        
-        # Explicitly cast these columns to the string type for safety
         df[string_cols] = df[string_cols].astype(str)
 
-        # Ensure numeric columns are treated as numbers, filling any blanks with 0
         numeric_cols = ['requiredQuantity', 'currentStock']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        
         # --- END OF DATA SANITIZATION FIX ---
 
-        # Group data for efficient lookup
         for (jig, so), group in df.groupby(['tester_jig_number', 'sale_order']):
             jig_str = str(jig)
             so_str = str(so)
             if jig_str not in testers_data_by_jig_and_so:
                 testers_data_by_jig_and_so[jig_str] = {}
             
-            # Convert the group of records to a list of dictionaries for JSON serialization
             testers_data_by_jig_and_so[jig_str][so_str] = group.to_dict('records')
             
         print(f"Data loaded and sanitized successfully. {len(testers_data_by_jig_and_so)} unique jig numbers found.")
         
     except FileNotFoundError:
-        print(f"ERROR: Data file not found at {DATA_FILE}. Make sure 'transform_data.py' has been run.")
+        print(f"ERROR: Data file not found at {DATA_FILE}. Make sure 'transform_data.py' has been run and succeeded.")
     except Exception as e:
         print(f"An error occurred during data loading: {e}")
         import traceback
@@ -94,7 +94,7 @@ def send_telegram_message(message_text):
     }
     try:
         response = requests.post(url, json=payload)
-        response.raise_for_status() # Raise an exception for bad status codes
+        response.raise_for_status()
         print("Telegram alert sent successfully!")
         return True
     except requests.exceptions.RequestException as e:
@@ -119,7 +119,6 @@ def get_jig_details():
     if not jig_data:
         return jsonify({'message': f'No details found for Jig Number: {jig_number}. Please check the number.'}), 404
 
-    # Extract unique sale orders and other details from the first available record
     sale_orders = list(jig_data.keys())
     first_record = next(iter(jig_data.values()))[0]
 
@@ -129,7 +128,7 @@ def get_jig_details():
         'sale_orders': sale_orders,
         'top_assy_no': first_record.get('top_assy_no'),
         'officialIncharge': first_record.get('officialIncharge'),
-        'status': first_record.get('status') # This is the overall launch status
+        'status': first_record.get('status')
     }
     return jsonify(response_data)
 
@@ -146,7 +145,6 @@ def get_shortage_list():
     if not parts_list:
         return jsonify({'message': f'No parts list found for Jig: {jig_number} and Sale Order: {sale_order}.'}), 404
 
-    # Filter for parts where the status is exactly 'Shortage'
     shortage_list = [
         part for part in parts_list if str(part.get('availability_status')).lower() == 'shortage'
     ]
@@ -166,7 +164,6 @@ def download_all_parts():
     all_parts = [part for so_parts in jig_data.values() for part in so_parts]
 
     df = pd.DataFrame(all_parts)
-    # Ensure consistent column order for the Excel export
     df = df[['tester_jig_number', 'sale_order', 'part_number', 'unitName', 'requiredQuantity', 'currentStock', 'availability_status', 'status']]
 
     output = io.BytesIO()
