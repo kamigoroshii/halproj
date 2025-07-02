@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HAL Tester Jig Tracking System</title>
+    <!-- Corrected Path for CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="company-info">
+                <!-- Corrected Path for Logo -->
+                <img src="/static/halogo.jpg" alt="HAL Logo" class="header-logo-img">
+                <div>
+                    <h1>Hindustan Aeronautics Limited</h1>
+                    <p class="tagline">Excellence in Aerospace • MIS</p>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="status-indicator">
+                    <span class="status-dot"></span>
+                    <span>System Operational</span>
+                </div>
+                <div class="hal-emblem">
+                    <i class="fas fa-fighter-jet"></i>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <div class="card search-card">
+            <div class="card-header">
+                <h2><i class="fas fa-search"></i> Tester Jig Search</h2>
+                <p>Enter the Tester Jig Number to retrieve delivery and shortage details.</p>
+            </div>
+            <div class="card-body">
+                <div class="search-form">
+                    <div class="input-group">
+                        <i class="fas fa-barcode"></i>
+                        <input type="text" id="jigNumberInput" placeholder="e.g., TJ-706">
+                    </div>
+                    <div class="button-group">
+                        <button id="searchJigBtn" class="btn btn-primary">
+                            <i class="fas fa-paper-plane"></i>
+                            <span>Search</span>
+                        </button>
+                        <button id="clearBtn" class="btn btn-secondary">
+                            <i class="fas fa-undo"></i>
+                            <span>Clear</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="jigDetailsDisplay" class="card details-card hidden">
+            <div class="card-header">
+                <h2><i class="fas fa-info-circle"></i> Jig Details</h2>
+                <div id="statusIndicator" class="status-indicator-box">
+                    <i id="statusIcon" class="fas fa-check-circle"></i>
+                    <span id="displayLaunchingStatus">Ready for Launch</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <span class="detail-label"><i class="fas fa-tag"></i> Jig Number</span>
+                        <span id="displayJigNumber" class="detail-value"></span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label"><i class="fas fa-file-invoice"></i> Sale Orders</span>
+                        <span id="displaySaleOrders" class="detail-value"></span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label"><i class="fas fa-cogs"></i> Top Assy No.</span>
+                        <span id="displayTopAssyNo" class="detail-value"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <button id="shortageListBtn" class="btn btn-warning">
+                    <i class="fas fa-list-ul"></i>
+                    <span>View Shortage List</span>
+                </button>
+                <button id="downloadAllPartsExcelBtn" class="btn btn-success">
+                    <i class="fas fa-file-excel"></i>
+                    <span>Download All Parts (Excel)</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Shortage List Modal -->
+    <div id="shortageListModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Material Shortage List</h3>
+                <button id="closeShortageModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                 <div class="sale-order-selector">
+                    <label for="shortageSaleOrderSelect">Select Sale Order:</label>
+                    <select id="shortageSaleOrderSelect"></select>
+                </div>
+                <div id="noShortageMessage" class="hidden">
+                    <p>No shortages found for this Sale Order.</p>
+                </div>
+                <div class="table-container">
+                    <table class="shortage-table">
+                        <thead>
+                            <tr>
+                                <th>Part Number</th>
+                                <th>Description</th>
+                                <th>Required</th>
+                                <th>Available</th>
+                                <th class="status-delayed">Shortage</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shortageTableBody">
+                            <!-- Rows will be inserted here by script.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-actions">
+                 <button id="shortageModalOk" class="btn btn-primary">
+                    <i class="fas fa-check"></i>
+                    <span>OK</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Generic Alert Modal -->
+    <div id="alertModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Alert</h3>
+                <button id="closeModal" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modalMessage"></p>
+            </div>
+            <div class="modal-actions">
+                <button id="modalOk" class="btn btn-primary">
+                    <i class="fas fa-check"></i>
+                    <span>OK</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner hidden">
+        <div class="spinner-container">
+            <div class="spinner">
+                <div class="spinner-inner">
+                    <i class="fas fa-fighter-jet"></i>
+                </div>
+            </div>
+            <div class="loading-text">
+                <h3>Processing Request</h3>
+                <p>Accessing HAL database...</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <!-- Corrected Path for Logo -->
+                <img src="/static/halogo.jpg" alt="HAL">
+                <span>HAL</span>
+            </div>
+            <div class="footer-text">
+                <p>© 2024 Hindustan Aeronautics Limited. All rights reserved.</p>
+                <p>Tester Delivery Tracking System v2.0</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Corrected Path for JavaScript -->
+    <script src="/static/script.js"></script>
+</body>
+</html>
