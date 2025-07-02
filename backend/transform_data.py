@@ -1,162 +1,120 @@
 import pandas as pd
-from flask import Flask, request, jsonify, render_template, send_file
-from flask_cors import CORS
+import numpy as np
 import os
-import requests
-import io
+import re
 import sys
-from dotenv import load_dotenv
 
-load_dotenv()
+print("Transform script started.")
 
 # --- Path Correction ---
+# Get the directory where this script is located (e.g., /.../backend)
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the project's root directory, which is one level up
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
-STATIC_FOLDER = os.path.join(PROJECT_ROOT, 'static')
-TEMPLATE_FOLDER = os.path.join(PROJECT_ROOT, 'templates')
-
-# --- Flask App Initialization ---
-app = Flask(__name__,
-            static_folder=STATIC_FOLDER,
-            template_folder=TEMPLATE_FOLDER)
-CORS(app)
 
 # --- Configuration ---
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-DATA_FILE = os.path.join(PROJECT_ROOT, 'data', 'processed_testers_data.csv')
+# Point to the 'data' folder at the project root
+DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
-# In-memory data store
-testers_data_by_jig_and_so = {}
+# Ensure the data directory exists
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+    print(f"Created data directory at: {DATA_DIR}")
 
-def load_data():
+# Define input files using the corrected DATA_DIR
+INPUT_FILES_CONFIG = [
+    {'path': os.path.join(DATA_DIR, 'merged_assembly_parts_list (1).xlsx'), 'sale_order': '04882'},
+    {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_1.xlsx'), 'sale_order': '04883'},
+    {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_2.xlsx'), 'sale_order': '04884'}
+]
+OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
+
+
+def transform_data(input_configs, output_path):
     """
-    Loads and cleans processed data, grouping it by tester_jig_number and sale_order.
+    Reads multiple Excel files, cleans and transforms the data, calculates
+    availability and launch status, and saves it to a single CSV file.
     """
-    global testers_data_by_jig_and_so
-    testers_data_by_jig_and_so = {}
-    try:
-        df = pd.read_csv(DATA_FILE)
+    print("Attempting to transform data from multiple sources.")
+    print(f"Output will be saved to: {output_path}")
 
-        # --- Data Sanitization ---
-        string_cols = ['availability_status', 'status', 'part_number', 'unitName', 'officialIncharge', 'tester_jig_number', 'sale_order', 'testerId', 'top_assy_no']
-        for col in string_cols:
-            if col in df.columns:
-                df[col] = df[col].fillna('N/A') # Use N/A for clarity
-        df[string_cols] = df[string_cols].astype(str)
+    all_dfs = []
+    for config in input_configs:
+        file_path = config['path']
+        sale_order = config['sale_order']
+        file_basename = os.path.basename(file_path)
+        print(f"\n--- Processing: {file_basename} for Sale Order: {sale_order} ---")
 
-        numeric_cols = ['requiredQuantity', 'currentStock']
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        
-        for (jig, so), group in df.groupby(['tester_jig_number', 'sale_order']):
-            jig_str = str(jig)
-            so_str = str(so)
-            if jig_str not in testers_data_by_jig_and_so:
-                testers_data_by_jig_and_so[jig_str] = {}
-            
-            testers_data_by_jig_and_so[jig_str][so_str] = group.to_dict('records')
-            
-        print(f"Data loaded and sanitized successfully. {len(testers_data_by_jig_and_so)} unique jig numbers found.")
-        
-    except FileNotFoundError:
-        print(f"ERROR: Data file not found at {DATA_FILE}. The build script may have failed.")
-    except Exception as e:
-        print(f"An error occurred during data loading: {e}")
+        try:
+            df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
+            # Sanitize headers
+            df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
-load_data()
+            # --- Robust Column Handling ---
+            # Restore original logic for creating columns if they don't exist
+            part_no_col = next((col for col in ['subassemblyorpartno', 'partno'] if col in df.columns), 'description')
+            df['part_number'] = df.get(part_no_col, 'N/A').astype(str)
 
-# --- API Routes (Restored to original structure) ---
+            req_qty_col = next((col for col in ['requiredqty', 'qtyrequired'] if col in df.columns), None)
+            stock_qty_col = next((col for col in ['qtyass', 'stockqty'] if col in df.columns), None)
 
-@app.route('/')
-def serve_index():
-    return render_template('index.html')
+            if req_qty_col:
+                df['requiredQuantity'] = pd.to_numeric(df[req_qty_col], errors='coerce').fillna(0)
+            else:
+                df['requiredQuantity'] = 0
 
-@app.route('/api/jig_details', methods=['GET'])
-def get_jig_details():
-    jig_number = request.args.get('jig_number')
-    if not jig_number:
-        return jsonify({'message': 'Jig number is required.'}), 400
+            if stock_qty_col:
+                df['currentStock'] = pd.to_numeric(df[stock_qty_col], errors='coerce').fillna(0)
+            else:
+                df['currentStock'] = 0
 
-    jig_data = testers_data_by_jig_and_so.get(jig_number)
-    if not jig_data:
-        return jsonify({'message': f'No details found for Jig Number: {jig_number}. Please check the number.'}), 404
+            df['tester_jig_number'] = df.get('testerjigno', 'TJ-706')
+            df['top_assy_no'] = df.get('topassyno', '130575')
+            df['testerId'] = df.get('testerid', 'HAL-TID-N/A')
+            df['unitName'] = df.get('description', 'N/A')
+            df['officialIncharge'] = df.get('officialincharge', '+91-0000000000')
+            df['sale_order'] = sale_order
 
-    sale_orders = sorted(list(jig_data.keys()))
-    first_record = next(iter(jig_data.values()))[0]
+            conditions = [
+                (df['requiredQuantity'] <= 0),
+                (df['currentStock'] == df['requiredQuantity']),
+                (df['currentStock'] < df['requiredQuantity']),
+                (df['currentStock'] > df['requiredQuantity'])
+            ]
+            choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
+            df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
-    response_data = {
-        'testerId': first_record.get('testerId', 'N/A'),
-        'tester_jig_number': first_record.get('tester_jig_number', 'N/A'),
-        'sale_orders': sale_orders,
-        'top_assy_no': first_record.get('top_assy_no', 'N/A'),
-        'officialIncharge': first_record.get('officialIncharge', 'N/A'),
-        'status': first_record.get('status', 'Status Unknown')
-    }
-    return jsonify(response_data)
+            df['status'] = df.groupby('tester_jig_number')['availability_status'].transform(
+                lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
+            )
 
-@app.route('/api/shortage_list', methods=['GET'])
-def get_shortage_list():
-    jig_number = request.args.get('jig_number')
-    sale_order = request.args.get('sale_order')
+            all_dfs.append(df)
 
-    if not jig_number or not sale_order:
-        return jsonify({'message': 'Jig number and sale order are required.'}), 400
+        except FileNotFoundError:
+            print(f"Error: Input XLSX file not found at {file_path}. Skipping this file.")
+        except Exception as e:
+            print(f"FATAL ERROR processing {file_basename}: {e}")
+            sys.exit(1)
 
-    parts_list = testers_data_by_jig_and_so.get(jig_number, {}).get(sale_order)
-    if not parts_list:
-        return jsonify({'message': f'No parts list found for Jig: {jig_number} and Sale Order: {sale_order}.'}), 404
+    if not all_dfs:
+        print("FATAL ERROR: No dataframes were successfully processed.")
+        sys.exit(1)
 
-    shortage_list = [p for p in parts_list if str(p.get('availability_status')).lower() == 'shortage']
-    return jsonify(shortage_list)
+    final_combined_df = pd.concat(all_dfs, ignore_index=True)
 
-@app.route('/api/download_all_parts_excel', methods=['GET'])
-def download_all_parts():
-    tester_jig_number = request.args.get('jig_number')
-    if not tester_jig_number:
-        return jsonify({'message': 'Jig number is required'}), 400
+    final_cols = [
+        'testerId', 'tester_jig_number', 'sale_order', 'top_assy_no', 'part_number', 'unitName',
+        'requiredQuantity', 'currentStock', 'availability_status', 'officialIncharge', 'status'
+    ]
+    for col in final_cols:
+        if col not in final_combined_df.columns:
+            final_combined_df[col] = None
 
-    jig_data = testers_data_by_jig_and_so.get(tester_jig_number)
-    if not jig_data:
-        return jsonify({'message': 'Jig not found'}), 404
+    final_combined_df[final_cols].to_csv(output_path, index=False, encoding='utf-8')
+    print(f"\nSuccessfully transformed and combined data and saved to: {output_path}")
 
-    all_parts = [part for so_parts in jig_data.values() for part in so_parts]
-    df = pd.DataFrame(all_parts)
-    df = df[['tester_jig_number', 'sale_order', 'part_number', 'unitName', 'requiredQuantity', 'currentStock', 'availability_status', 'status']]
-    
-    output = io.BytesIO()
-    df.to_excel(output, index=False, sheet_name='All_Parts_List')
-    output.seek(0)
 
-    return send_file(
-        output,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        download_name=f'HAL_All_Parts_{tester_jig_number}.xlsx',
-        as_attachment=True
-    )
-
-@app.route('/api/send_telegram_alert', methods=['POST'])
-def send_telegram_alert_route():
-    data = request.get_json()
-    message = data.get('message')
-    if not message:
-        return jsonify({'message': 'Message content is required.'}), 400
-    
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return jsonify({'message': 'Telegram is not configured on the server.'}), 500
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'Markdown'}
-    
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-        return jsonify({'message': 'Telegram alert sent successfully!'}), 200
-    except requests.exceptions.RequestException as e:
-        print(f"Telegram API error: {e}")
-        return jsonify({'message': 'Failed to send Telegram alert.'}), 500
-
-# --- Main Execution ---
+# This block ensures the transform_data function is called only when the script is run directly.
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    transform_data(INPUT_FILES_CONFIG, OUTPUT_CSV)
+    print("\nScript finished.")
