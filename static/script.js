@@ -11,15 +11,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
     const statusIcon = document.getElementById('statusIcon');
 
-    const shortageListBtn = document.getElementById('shortageListBtn');
+    // --- BUTTONS ---
+    const viewAllPartsBtn = document.getElementById('viewAllPartsBtn');
     const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelBtn');
+    const sendTelegramAlertBtn = document.getElementById('sendTelegramAlertBtn');
 
-    const shortageListModal = document.getElementById('shortageListModal');
-    const closeShortageModalBtn = document.getElementById('closeShortageModal');
-    const shortageModalOkBtn = document.getElementById('shortageModalOk');
-    const shortageTableBody = document.getElementById('shortageTableBody');
-    const noShortageMessage = document.getElementById('noShortageMessage');
-    const shortageSaleOrderSelect = document.getElementById('shortageSaleOrderSelect');
+    // --- MODALS ---
+    const partsListModal = document.getElementById('partsListModal');
+    const closePartsListModalBtn = document.getElementById('closePartsListModal');
+    const partsListModalOkBtn = document.getElementById('partsListModalOk');
+    const partsTableBody = document.getElementById('partsTableBody');
+    const partsListSaleOrderSelect = document.getElementById('partsListSaleOrderSelect');
+    const partsListModalTitle = document.getElementById('partsListModalTitle');
 
     const alertModal = document.getElementById('alertModal');
     const closeModalBtn = document.getElementById('closeModal');
@@ -30,32 +33,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingSpinner = document.getElementById('loadingSpinner');
 
     // --- State Management ---
-    let currentJigNumber = null;
-    let currentSaleOrders = [];
+    let currentJigData = null;
+    let allPartsData = {}; // Store all parts data by sale order to avoid re-fetching
 
     // --- Event Listeners ---
     searchJigBtn.addEventListener('click', searchJigDetails);
     jigNumberInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            searchJigDetails();
-        }
+        if (e.key === 'Enter') searchJigDetails();
     });
 
-    clearBtn.addEventListener('click', clearForm);
-    shortageListBtn.addEventListener('click', openShortageModal);
+    clearBtn.addEventListener('click', () => clearForm());
+    viewAllPartsBtn.addEventListener('click', openPartsListModal);
     downloadAllPartsExcelBtn.addEventListener('click', downloadAllPartsExcel);
+    sendTelegramAlertBtn.addEventListener('click', sendTelegramAlert);
 
     // Modal close listeners
-    closeShortageModalBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
-    shortageModalOkBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
+    closePartsListModalBtn.addEventListener('click', () => partsListModal.classList.add('hidden'));
+    partsListModalOkBtn.addEventListener('click', () => partsListModal.classList.add('hidden'));
     closeModalBtn.addEventListener('click', () => alertModal.classList.add('hidden'));
     modalOkBtn.addEventListener('click', () => alertModal.classList.add('hidden'));
+    partsListSaleOrderSelect.addEventListener('change', displaySelectedPartsList);
 
     // --- Core Functions ---
 
-    /**
-     * Fetches and displays details for the entered Jig Number.
-     */
     async function searchJigDetails() {
         const jigNumber = jigNumberInput.value.trim();
         if (!jigNumber) {
@@ -64,178 +64,165 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         showLoading(true);
-        clearForm(true); // Clear previous results but keep input value
+        clearForm(true);
 
         try {
-            // CORRECTED API CALL: Using query parameters
             const response = await fetch(`/api/jig_details?jig_number=${encodeURIComponent(jigNumber)}`);
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.message || `Error: ${response.status}`);
             }
 
             const data = await response.json();
+            currentJigData = data; // Store all jig data
 
-            // Store state
-            currentJigNumber = data.tester_jig_number;
-            currentSaleOrders = data.sale_orders;
+            displayJigNumber.textContent = data.tester_jig_number || 'N/A';
+            displaySaleOrders.textContent = data.sale_orders.join(', ') || 'N/A';
+            displayTopAssyNo.textContent = data.top_assy_no || 'N/A';
+            displayLaunchingStatus.textContent = data.status || 'Status Unknown';
 
-            // Populate display fields
-            displayJigNumber.textContent = data.tester_jig_number;
-            displaySaleOrders.textContent = data.sale_orders.join(', ');
-            displayTopAssyNo.textContent = data.top_assy_no;
-            displayLaunchingStatus.textContent = data.status;
-
-            // Update status indicator color and icon based on the launch status
-            if (data.status.toLowerCase().includes('delayed')) {
-                displayLaunchingStatus.classList.remove('status-ready');
-                displayLaunchingStatus.classList.add('status-delayed');
+            if (data.status && data.status.toLowerCase().includes('delayed')) {
+                displayLaunchingStatus.parentElement.className = 'status-indicator-box status-delayed';
                 statusIcon.className = 'fas fa-exclamation-triangle';
             } else {
-                displayLaunchingStatus.classList.remove('status-delayed');
-                displayLaunchingStatus.classList.add('status-ready');
+                displayLaunchingStatus.parentElement.className = 'status-indicator-box status-ready';
                 statusIcon.className = 'fas fa-check-circle';
             }
 
             jigDetailsDisplaySection.classList.remove('hidden');
-
+            // Pre-fetch all parts data in the background
+            fetchAllPartsForJig();
         } catch (error) {
             console.error('Error fetching jig details:', error);
             showInfoModal('Search Failed', `Could not find details. Reason: ${error.message}`, true);
+            currentJigData = null; // Reset on failure
         } finally {
             showLoading(false);
         }
-    }
-
-    /**
-     * Opens the shortage modal and populates it with data.
-     */
-    async function openShortageModal() {
-        if (!currentJigNumber) return;
-
-        // Populate the select dropdown with sale orders
-        shortageSaleOrderSelect.innerHTML = currentSaleOrders.map(so => `<option value="${so}">${so}</option>`).join('');
-        
-        // Fetch shortage for the first sale order by default
-        await fetchAndDisplayShortageList();
-
-        shortageListModal.classList.remove('hidden');
     }
     
-    // Add event listener for the new dropdown
-    shortageSaleOrderSelect.addEventListener('change', fetchAndDisplayShortageList);
-
-
-    /**
-     * Fetches and displays the shortage list for the selected sale order.
-     */
-    async function fetchAndDisplayShortageList() {
-        const selectedSaleOrder = shortageSaleOrderSelect.value;
-        if (!currentJigNumber || !selectedSaleOrder) return;
-
-        showLoading(true);
+    async function fetchAllPartsForJig() {
+        if (!currentJigData) return;
+        allPartsData = {}; // Clear previous data
         
+        // This is a new API endpoint we'll add to app.py to get everything at once
         try {
-            // CORRECTED API CALL: Using query parameters
-            const response = await fetch(`/api/shortage_list?jig_number=${encodeURIComponent(currentJigNumber)}&sale_order=${encodeURIComponent(selectedSaleOrder)}`);
+            const response = await fetch(`/api/all_parts_for_jig?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`);
+            const allParts = await response.json();
             
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `Error: ${response.status}`);
-            }
-
-            const shortageData = await response.json();
-            populateShortageTable(shortageData);
-
-        } catch (error) {
-             console.error('Error fetching shortage list:', error);
-             showInfoModal('Error', `Could not fetch shortage list. Reason: ${error.message}`, true);
-        } finally {
-            showLoading(false);
-        }
-    }
-
-
-    /**
-     * Populates the shortage table with data.
-     * @param {Array} shortageData - Array of shortage items.
-     */
-    function populateShortageTable(shortageData) {
-        shortageTableBody.innerHTML = ''; // Clear previous data
-
-        if (shortageData.length === 0) {
-            noShortageMessage.classList.remove('hidden');
-            shortageTableBody.classList.add('hidden');
-        } else {
-            noShortageMessage.classList.add('hidden');
-            shortageTableBody.classList.remove('hidden');
-            shortageData.forEach(item => {
-                const missingQty = item.requiredQuantity - item.currentStock;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${item.part_number || 'N/A'}</td>
-                    <td>${item.unitName || 'N/A'}</td>
-                    <td>${item.requiredQuantity}</td>
-                    <td>${item.currentStock}</td>
-                    <td class="status-delayed">${missingQty > 0 ? missingQty : 'N/A'}</td>
-                `;
-                shortageTableBody.appendChild(row);
+            // Group parts by sale order for easy access later
+            currentJigData.sale_orders.forEach(so => {
+                allPartsData[so] = allParts.filter(p => p.sale_order === so);
             });
+            console.log("All parts data pre-fetched and grouped.");
+        } catch (error) {
+            console.error("Could not pre-fetch parts data:", error);
         }
     }
 
-    /**
-     * Downloads an Excel file with all parts for the current jig.
-     */
-    function downloadAllPartsExcel() {
-        if (!currentJigNumber) {
+    function openPartsListModal() {
+        if (!currentJigData) return;
+
+        partsListModalTitle.textContent = 'All Parts List';
+        partsListSaleOrderSelect.innerHTML = currentJigData.sale_orders.map(so => `<option value="${so}">${so}</option>`).join('');
+        
+        displaySelectedPartsList();
+        partsListModal.classList.remove('hidden');
+    }
+
+    function displaySelectedPartsList() {
+        const selectedSaleOrder = partsListSaleOrderSelect.value;
+        const partsData = allPartsData[selectedSaleOrder];
+        populatePartsTable(partsData);
+    }
+
+    function populatePartsTable(partsData) {
+        partsTableBody.innerHTML = ''; // Clear previous data
+        if (!partsData || partsData.length === 0) {
+            partsTableBody.innerHTML = '<tr><td colspan="5">No parts found for this selection.</td></tr>';
+            return;
+        }
+
+        partsData.forEach(item => {
+            const status = (item.availability_status || 'unknown').toLowerCase().replace(' ', '-');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${item.part_number || 'N/A'}</td>
+                <td>${item.unitName || 'N/A'}</td>
+                <td>${item.requiredQuantity}</td>
+                <td>${item.currentStock}</td>
+                <td><span class="status-cell ${status}">${item.availability_status}</span></td>
+            `;
+            partsTableBody.appendChild(row);
+        });
+    }
+
+    async function sendTelegramAlert() {
+        if (!currentJigData) {
             showInfoModal('Error', 'Please search for a Jig Number first.', true);
             return;
         }
-        // CORRECTED API CALL: Using query parameters
-        const url = `/api/download_all_parts_excel?jig_number=${encodeURIComponent(currentJigNumber)}`;
+
+        const jigNumber = currentJigData.tester_jig_number;
+        const status = currentJigData.status;
+        const shortages = allPartsData[currentJigData.sale_orders[0]]?.filter(p => p.availability_status === 'Shortage').length || 0;
+
+        const message = `
+*HAL Alert: Tester Jig Status*
+------------------------------------
+*Jig Number:* \`${jigNumber}\`
+*Overall Status:* ${status}
+*Total Shortages:* ${shortages}
+*Official In-Charge:* ${currentJigData.officialIncharge || 'N/A'}
+------------------------------------
+This is an automated notification.
+        `;
+
+        showLoading(true);
+        try {
+            const response = await fetch('/api/send_telegram_alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: message.trim() })
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.message || 'Failed to send alert.');
+            }
+            showInfoModal('Success', result.message);
+        } catch (error) {
+            console.error('Error sending Telegram alert:', error);
+            showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function downloadAllPartsExcel() {
+        if (!currentJigData) {
+            showInfoModal('Error', 'Please search for a Jig Number first.', true);
+            return;
+        }
+        const url = `/api/download_all_parts_excel?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`;
         window.open(url, '_blank');
     }
 
     // --- UI Helper Functions ---
-
-    /**
-     * Resets the form and display areas.
-     * @param {boolean} keepInput - If true, does not clear the jig number input field.
-     */
     function clearForm(keepInput = false) {
-        if (!keepInput) {
-            jigNumberInput.value = '';
-        }
+        if (!keepInput) jigNumberInput.value = '';
         jigDetailsDisplaySection.classList.add('hidden');
-        displayJigNumber.textContent = '';
-        displaySaleOrders.textContent = '';
-        displayTopAssyNo.textContent = '';
-        displayLaunchingStatus.textContent = '';
-        currentJigNumber = null;
-        currentSaleOrders = [];
+        currentJigData = null;
+        allPartsData = {};
         jigNumberInput.focus();
     }
 
-    /**
-     * Shows or hides the loading spinner.
-     * @param {boolean} show - True to show, false to hide.
-     */
     function showLoading(show) {
-        if (show) {
-            loadingSpinner.classList.remove('hidden');
-        } else {
-            loadingSpinner.classList.add('hidden');
-        }
+        loadingSpinner.classList.toggle('hidden', !show);
     }
 
-    /**
-     * Displays a generic information modal.
-     * @param {string} title - The title of the modal.
-     * @param {string} message - The message content.
-     * @param {boolean} isError - If true, styles the title as an error.
-     */
+
+
     function showInfoModal(title, message, isError = false) {
         modalTitle.textContent = title;
         modalMessage.textContent = message;
