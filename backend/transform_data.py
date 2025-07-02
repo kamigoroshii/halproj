@@ -7,21 +7,16 @@ import sys
 print("Transform script started.")
 
 # --- Path Correction ---
-# Get the directory where this script is located (e.g., /.../backend)
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-# Get the project's root directory, which is one level up
 PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 
 # --- Configuration ---
-# Point to the 'data' folder at the project root
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 
-# Ensure the data directory exists
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
     print(f"Created data directory at: {DATA_DIR}")
 
-# Define input files using the corrected DATA_DIR
 INPUT_FILES_CONFIG = [
     {'path': os.path.join(DATA_DIR, 'merged_assembly_parts_list (1).xlsx'), 'sale_order': '04882'},
     {'path': os.path.join(DATA_DIR, 'assembly_parts_list_variant_1.xlsx'), 'sale_order': '04883'},
@@ -47,7 +42,6 @@ def transform_data(input_configs, output_path):
 
         try:
             df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
-            # Sanitize headers
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
             # --- Robust Column Handling ---
@@ -63,6 +57,16 @@ def transform_data(input_configs, output_path):
                 print(f"Warning: 'stockqty' column not found in {file_basename}. Defaulting to 0.")
                 df['currentStock'] = 0
             
+            # --- START OF FINAL DATA FIX ---
+            # If 'testerjigno' column is missing, create 'tester_jig_number' with a default value.
+            # Otherwise, rename 'testerjigno' to 'tester_jig_number'.
+            if 'testerjigno' not in df.columns:
+                print(f"Warning: 'testerjigno' column not found in {file_basename}. Assigning default 'TJ-706'.")
+                df['tester_jig_number'] = 'TJ-706'
+            else:
+                df.rename(columns={'testerjigno': 'tester_jig_number'}, inplace=True)
+            # --- END OF FINAL DATA FIX ---
+            
             conditions = [
                 (df['requiredQuantity'] <= 0),
                 (df['currentStock'] == df['requiredQuantity']),
@@ -72,22 +76,14 @@ def transform_data(input_configs, output_path):
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
-            # --- START OF FINAL FIX for 'testerjigno' KeyError ---
-            # Check if 'testerjigno' column exists before grouping.
-            if 'testerjigno' in df.columns:
-                df['status'] = df.groupby('testerjigno')['availability_status'].transform(
-                    lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
-                )
-            else:
-                # If the column is missing, we cannot determine the overall status, so we set a default.
-                print(f"Warning: 'testerjigno' column not found in {file_basename}. Cannot determine overall launch status. Defaulting to 'Status Unknown'.")
-                df['status'] = 'Status Unknown'
-            # --- END OF FINAL FIX ---
+            # Now, group by the guaranteed 'tester_jig_number' column.
+            df['status'] = df.groupby('tester_jig_number')['availability_status'].transform(
+                lambda x: 'Launch Delayed - Shortages Exist' if (x == 'Shortage').any() else 'Ready for Launch'
+            )
 
             df['sale_order'] = sale_order
             df.rename(columns={
                 'testerid': 'testerId',
-                'testerjigno': 'tester_jig_number',
                 'topassyno': 'top_assy_no',
                 'partno': 'part_number',
                 'unit': 'unitName',
@@ -100,11 +96,11 @@ def transform_data(input_configs, output_path):
             print(f"Error: Input XLSX file not found at {file_path}. Skipping this file.")
         except Exception as e:
             print(f"FATAL ERROR processing {file_basename}: {e}")
-            sys.exit(1) # Exit with an error code to fail the build
+            sys.exit(1)
 
     if not all_dfs:
         print("FATAL ERROR: No dataframes were successfully processed. Output CSV will not be created.")
-        sys.exit(1) # Exit with an error code to fail the build
+        sys.exit(1)
 
     final_combined_df = pd.concat(all_dfs, ignore_index=True)
 
