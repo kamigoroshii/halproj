@@ -355,25 +355,3 @@ body {
 }
 
 
-
-
-.toast-notification {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--primary-blue);
-    color: white;
-    padding: 1rem 2rem;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 2000;
-    opacity: 0;
-    animation: fadeInOut 3s ease-in-out;
-}
-
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0; bottom: 0; }
-    10%, 90% { opacity: 1; bottom: 20px; }
-}
-

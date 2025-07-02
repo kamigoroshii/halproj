@@ -29,62 +29,9 @@ DATA_FILE = os.path.join(PROJECT_ROOT, 'data', 'processed_testers_data.csv')
 # In-memory data store
 testers_data_by_jig_and_so = {}
 
-def send_telegram_message(message_text):
-    """Sends a message to the configured Telegram chat."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram environment variables not set. Skipping alert.")
-        return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': message_text, 'parse_mode': 'Markdown'}
-    try:
-        response = requests.post(url, json=payload)
-        response.raise_for_status()
-        print(f"Successfully sent Telegram alert for: {message_text.splitlines()[2]}")
-        return True
-    except requests.exceptions.RequestException as e:
-        print(f"Failed to send Telegram message: {e}")
-        return False
-
-def check_and_send_launch_alerts():
-    """
-    Iterates through all loaded jigs and sends a Telegram alert for any
-    jig with a status of 'Not Launched'. This runs once on startup.
-    """
-    print("Checking for any jigs that are 'Not Launched' to send alerts...")
-    alerted_jigs = set()
-
-    for jig_number, sale_orders_data in testers_data_by_jig_and_so.items():
-        if not sale_orders_data or jig_number in alerted_jigs:
-            continue
-
-        first_so_parts = next(iter(sale_orders_data.values()), None)
-        if not first_so_parts:
-            continue
-        
-        status = first_so_parts[0].get('status')
-
-        if status == 'Not Launched':
-            alerted_jigs.add(jig_number) # Ensure we only alert once per jig number
-            
-            total_shortages = sum(
-                1 for so_parts in sale_orders_data.values() 
-                for part in so_parts if part.get('availability_status') == 'Shortage'
-            )
-
-            message = (
-                f"🚨 *Automatic Alert: Tester Jig Launch Status*\n"
-                f"------------------------------------\n"
-                f"⚙️ *Jig Number:* `{jig_number}`\n"
-                f"📉 *Status:* *{status}* (Due to {total_shortages} part shortage(s))\n"
-                f"------------------------------------\n"
-                f"Please review requirements in the tracking system."
-            )
-            send_telegram_message(message.strip())
-
-
 def load_data():
     """
-    Loads and cleans processed data, then triggers automated alerts.
+    Loads and cleans processed data.
     """
     global testers_data_by_jig_and_so
     testers_data_by_jig_and_so = {}
@@ -111,19 +58,15 @@ def load_data():
             
         print(f"Data loaded and sanitized successfully. {len(testers_data_by_jig_and_so)} unique jig numbers found.")
         
-        # After loading, automatically check for statuses and send alerts
-        check_and_send_launch_alerts()
-        
     except FileNotFoundError:
         print(f"ERROR: Data file not found at {DATA_FILE}. The build script may have failed.")
     except Exception as e:
         print(f"An error occurred during data loading: {e}")
 
-# Load data on application startup, which will also trigger the alert check
+# Load data on application startup
 load_data()
 
-# --- API Routes ---
-# (The rest of the API routes remain the same as the last correct version)
+# --- API Routes (Reverted to original working state) ---
 
 @app.route('/')
 def serve_index():
@@ -197,12 +140,20 @@ def send_telegram_alert_route():
     if not message:
         return jsonify({'message': 'Message content is required.'}), 400
     
-    if send_telegram_message(message):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return jsonify({'message': 'Telegram is not configured on the server.'}), 500
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': message, 'parse_mode': 'Markdown'}
+    
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
         return jsonify({'message': 'Telegram alert sent successfully!'}), 200
-    else:
+    except requests.exceptions.RequestException as e:
+        print(f"Telegram API error: {e}")
         return jsonify({'message': 'Failed to send Telegram alert.'}), 500
 
 # --- Main Execution ---
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
-

@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- DOM Element Selection (from your original code) ---
+    // --- DOM Element Selection ---
     const jigNumberInput = document.getElementById('jigNumberInput');
     const searchJigBtn = document.getElementById('searchJigBtn');
     const clearBtn = document.getElementById('clearBtn');
@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) clearBtn.addEventListener('click', () => clearForm());
     if (shortageListBtn) shortageListBtn.addEventListener('click', openPartsListModal);
     if (downloadAllPartsExcelBtn) downloadAllPartsExcelBtn.addEventListener('click', downloadAllPartsExcel);
-    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', () => sendTelegramAlert(false)); // Manual call
+    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', sendTelegramAlert);
 
     if (closeShortageModalBtn) closeShortageModalBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
     if (shortageModalOkBtn) shortageModalOkBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
             displayTopAssyNo.textContent = data.top_assy_no || 'N/A';
             displayLaunchingStatus.textContent = data.status || 'Status Unknown';
 
-            if (data.status && data.status.toLowerCase() === 'not launched') {
+            if (data.status && data.status.toLowerCase().includes('delayed')) {
                 displayLaunchingStatus.parentElement.className = 'status-indicator-box status-delayed';
                 if (statusIcon) statusIcon.className = 'fas fa-exclamation-triangle';
             } else {
@@ -89,17 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             jigDetailsDisplaySection.classList.remove('hidden');
             jigDetailsDisplaySection.classList.add('fade-in');
             
-            // Pre-fetch all parts data for this jig
             await fetchAllPartsForJig();
-
-            // --- START: Automatic Telegram Alert Logic ---
-            if (data.status === 'Not Launched') {
-                console.log("Status is 'Not Launched'. Automatically sending Telegram alert.");
-                // The 'true' flag indicates this is an automatic alert.
-                await sendTelegramAlert(true);
-            }
-            // --- END: Automatic Telegram Alert Logic ---
-
         } catch (error) {
             console.error('Error fetching jig details:', error);
             showInfoModal('Search Failed', `Could not find details. Reason: ${error.message}`, true);
@@ -164,16 +154,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function sendTelegramAlert(isAutomatic = false) {
+    async function sendTelegramAlert() {
         if (!currentJigData) {
             showInfoModal('Error', 'Please search for a Jig Number first.', true);
             return;
         }
 
-        // Don't show the loading spinner again if it's an automatic send
-        if (!isAutomatic) {
-            showLoading(true);
-        }
+        showLoading(true);
 
         const jigNumber = currentJigData.tester_jig_number;
         const status = currentJigData.status;
@@ -193,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
 *Total Shortages:* ${shortageCount}
 *Official In-Charge:* ${currentJigData.officialIncharge || 'N/A'}
 ------------------------------------
-This is an automated notification.
+This is a manual alert triggered by a user.
         `;
 
         try {
@@ -206,35 +193,13 @@ This is an automated notification.
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || 'Failed to send alert.');
             
-            // Only show the big modal for manual clicks
-            if (!isAutomatic) {
-                showInfoModal('Success', result.message);
-            } else {
-                console.log("Automatic Telegram alert sent successfully.");
-                // Optionally, show a small, temporary notification (a "toast")
-                showToast("Automatic 'Not Launched' alert sent to Telegram.");
-            }
+            showInfoModal('Success', result.message);
         } catch (error) {
             console.error('Error sending Telegram alert:', error);
-            if (!isAutomatic) {
-                showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
-            }
+            showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
         } finally {
-            if (!isAutomatic) {
-                showLoading(false);
-            }
+            showLoading(false);
         }
-    }
-    
-    // A simple toast notification function
-    function showToast(message) {
-        const toast = document.createElement('div');
-        toast.className = 'toast-notification';
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
     }
 
     function downloadAllPartsExcel() {
@@ -265,26 +230,3 @@ This is an automated notification.
         if (alertModal) alertModal.classList.remove('hidden');
     }
 });
-
-// Add this CSS to your style.css file for the toast notification
-/*
-.toast-notification {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--primary-blue);
-    color: white;
-    padding: 1rem 2rem;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    z-index: 2000;
-    opacity: 0;
-    animation: fadeInOut 3s ease-in-out;
-}
-
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0; bottom: 0; }
-    10%, 90% { opacity: 1; bottom: 20px; }
-}
-*/
