@@ -15,19 +15,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelBtn');
     const sendTelegramAlertBtn = document.getElementById('sendTelegramAlertBtn');
 
+    // --- New Sidebar Elements ---
+    const docsSidebar = document.getElementById('docsSidebar');
+    const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+    const sidebarJigNumber = document.getElementById('sidebarJigNumber');
+    const docLinks = document.querySelectorAll('.doc-link');
+
+    // --- Modal and Spinner Elements ---
     const shortageListModal = document.getElementById('shortageListModal');
     const closeShortageModalBtn = document.getElementById('closeShortageModal');
     const shortageModalOkBtn = document.getElementById('shortageModalOk');
     const shortageTableBody = document.getElementById('shortageTableBody');
     const noShortageMessage = document.getElementById('noShortageMessage');
     const shortageSaleOrderSelect = document.getElementById('shortageSaleOrderSelect');
-
     const alertModal = document.getElementById('alertModal');
     const closeModalBtn = document.getElementById('closeModal');
     const modalOkBtn = document.getElementById('modalOk');
     const modalTitle = document.getElementById('modalTitle');
     const modalMessage = document.getElementById('modalMessage');
-
     const loadingSpinner = document.getElementById('loadingSpinner');
 
     // --- State Management ---
@@ -43,8 +48,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearBtn) clearBtn.addEventListener('click', () => clearForm());
     if (shortageListBtn) shortageListBtn.addEventListener('click', openPartsListModal);
     if (downloadAllPartsExcelBtn) downloadAllPartsExcelBtn.addEventListener('click', downloadAllPartsExcel);
-    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', () => sendTelegramAlert(false)); // False for manual click
+    if (sendTelegramAlertBtn) sendTelegramAlertBtn.addEventListener('click', () => sendTelegramAlert(false));
 
+    // --- New Sidebar Listeners ---
+    if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', closeSidebar);
+    docLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const docType = e.currentTarget.dataset.docType;
+            openDocument(docType);
+        });
+    });
+
+    // --- Modal Listeners ---
     if (closeShortageModalBtn) closeShortageModalBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
     if (shortageModalOkBtn) shortageModalOkBtn.addEventListener('click', () => shortageListModal.classList.add('hidden'));
     if (closeModalBtn) closeModalBtn.addEventListener('click', () => alertModal.classList.add('hidden'));
@@ -62,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showLoading(true);
         clearForm(true);
+        closeSidebar(); // Close sidebar on new search
 
         try {
             const response = await fetch(`/api/jig_details?jig_number=${encodeURIComponent(jigNumber)}`);
@@ -78,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
             displayTopAssyNo.textContent = data.top_assy_no || 'N/A';
             displayLaunchingStatus.textContent = data.status || 'Status Unknown';
 
-            if (data.status && data.status.toLowerCase() === 'not launched') {
+            if (data.status && data.status.toLowerCase().includes('delayed')) {
                 displayLaunchingStatus.parentElement.className = 'status-indicator-box status-delayed';
                 if (statusIcon) statusIcon.className = 'fas fa-exclamation-triangle';
             } else {
@@ -90,13 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
             jigDetailsDisplaySection.classList.add('fade-in');
             
             await fetchAllPartsForJig();
-
-            // --- START: Automatic Telegram Alert Logic ---
-            if (data.status === 'Not Launched') {
-                console.log("Status is 'Not Launched'. Automatically sending Telegram alert.");
-                await sendTelegramAlert(true); // Pass 'true' for automatic alert
-            }
-            // --- END: Automatic Telegram Alert Logic ---
+            
+            // --- Show the sidebar after a successful search ---
+            openSidebar();
 
         } catch (error) {
             console.error('Error fetching jig details:', error);
@@ -107,16 +120,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // --- New Sidebar Functions ---
+    function openSidebar() {
+        if (!currentJigData) return;
+        sidebarJigNumber.textContent = currentJigData.tester_jig_number;
+        docsSidebar.classList.add('open');
+    }
+
+    function closeSidebar() {
+        docsSidebar.classList.remove('open');
+    }
+
+    function openDocument(docType) {
+        if (!currentJigData) {
+            showInfoModal('Error', 'No Tester Jig selected.', true);
+            return;
+        }
+        const jigNumber = currentJigData.tester_jig_number;
+        // In a real application, you would have a predictable URL structure.
+        // For now, we will use a placeholder.
+        const pdfUrl = `/docs/${jigNumber}_${docType}.pdf`;
+        showInfoModal('Opening Document', `Attempting to open ${docType} for ${jigNumber}. In a real app, this would open a PDF file from: ${pdfUrl}`);
+        // To open in a new tab:
+        // window.open(pdfUrl, '_blank');
+    }
+
+
+    // --- Existing Functions (Unchanged) ---
     async function fetchAllPartsForJig() {
         if (!currentJigData) return;
         allPartsData = {};
-
         try {
             const response = await fetch(`/api/all_parts_for_jig?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`);
             if (!response.ok) throw new Error('Server responded with an error fetching parts.');
-            
             const allParts = await response.json();
-            
             currentJigData.sale_orders.forEach(so => {
                 allPartsData[so] = allParts.filter(p => p.sale_order === so);
             });
@@ -162,74 +199,45 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function sendTelegramAlert(isAutomatic = false) {
+    async function sendTelegramAlert() {
         if (!currentJigData) {
             showInfoModal('Error', 'Please search for a Jig Number first.', true);
             return;
         }
-
-        if (!isAutomatic) {
-            showLoading(true);
-        }
-
+        showLoading(true);
         const jigNumber = currentJigData.tester_jig_number;
         const status = currentJigData.status;
-        
         let shortageCount = 0;
         if (allPartsData) {
             Object.values(allPartsData).forEach(parts => {
                 shortageCount += parts.filter(p => p.availability_status === 'Shortage').length;
             });
         }
-
-        const alertType = isAutomatic ? "Automatic Alert" : "Manual Alert";
         const message = `
-*${alertType}: Tester Jig Status*
+*HAL Alert: Tester Jig Status*
 ------------------------------------
 *Jig Number:* \`${jigNumber}\`
 *Overall Status:* ${status}
 *Total Shortages:* ${shortageCount}
 *Official In-Charge:* ${currentJigData.officialIncharge || 'N/A'}
 ------------------------------------
-This alert was triggered ${isAutomatic ? 'automatically due to shortage' : 'manually by a user'}.
+This is a manual alert triggered by a user.
         `;
-
         try {
             const response = await fetch('/api/send_telegram_alert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: message.trim() })
             });
-
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || 'Failed to send alert.');
-            
-            if (!isAutomatic) {
-                showInfoModal('Success', result.message);
-            } else {
-                console.log("Automatic Telegram alert sent successfully.");
-                showToast("Automatic 'Not Launched' alert sent to Telegram.");
-            }
+            showInfoModal('Success', result.message);
         } catch (error) {
             console.error('Error sending Telegram alert:', error);
-            if (!isAutomatic) {
-                showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
-            }
+            showInfoModal('Telegram Error', `Could not send alert. Reason: ${error.message}`, true);
         } finally {
-            if (!isAutomatic) {
-                showLoading(false);
-            }
+            showLoading(false);
         }
-    }
-    
-    function showToast(message) {
-        const toast = document.createElement('div');
-        toast.className = 'toast-notification';
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
     }
 
     function downloadAllPartsExcel() {
@@ -246,6 +254,7 @@ This alert was triggered ${isAutomatic ? 'automatically due to shortage' : 'manu
         jigDetailsDisplaySection.classList.add('hidden');
         currentJigData = null;
         allPartsData = {};
+        closeSidebar();
         jigNumberInput.focus();
     }
 

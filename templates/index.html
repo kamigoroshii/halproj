@@ -4,71 +4,116 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HAL Tester Jig Tracking System</title>
-    <!-- Correct path for deployment -->
     <link rel="stylesheet" href="/static/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <header class="header">
-        <div class="header-content">
-            <div class="company-info">
-                <img src="/static/halogo.jpg" alt="HAL Logo" class="header-logo-img">
-                <div>
-                    <h1>Hindustan Aeronautics Limited</h1>
-                    <p class="tagline">Excellence in Aerospace • MIS</p>
-                </div>
-            </div>
-            <div class="header-status">
-                <div class="status-indicator"><span class="status-dot"></span><span>System Operational</span></div>
-                <div class="hal-emblem"><i class="fas fa-fighter-jet"></i></div>
-            </div>
-        </div>
-    </header>
-
-    <main class="main-container">
-        <div class="card search-card">
-            <div class="card-header">
-                <h2><i class="fas fa-search"></i> Tester Jig Search</h2>
-            </div>
-            <div class="card-body">
-                <div class="search-form">
-                    <div class="input-group">
-                        <i class="fas fa-barcode"></i>
-                        <input type="text" id="jigNumberInput" placeholder="e.g., TJ-706">
-                    </div>
-                    <div class="button-group">
-                        <button id="searchJigBtn" class="btn btn-primary"><i class="fas fa-paper-plane"></i><span>Search</span></button>
-                        <button id="clearBtn" class="btn btn-secondary"><i class="fas fa-undo"></i><span>Clear</span></button>
+    <!-- Main Page Wrapper -->
+    <div id="pageWrapper">
+        <header class="header">
+            <div class="header-content">
+                <div class="company-info">
+                    <img src="/static/halogo.jpg" alt="HAL Logo" class="header-logo-img">
+                    <div>
+                        <h1>Hindustan Aeronautics Limited</h1>
+                        <p class="tagline">Excellence in Aerospace • MIS</p>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div id="jigDetailsDisplay" class="card details-card hidden">
-            <div class="card-header">
-                <h2><i class="fas fa-info-circle"></i> Jig Details</h2>
-                <div class="status-indicator-box">
-                    <i id="statusIcon" class="fas fa-check-circle"></i>
-                    <span id="displayLaunchingStatus"></span>
+                <div class="header-status">
+                    <div class="status-indicator"><span class="status-dot"></span><span>System Operational</span></div>
+                    <div class="hal-emblem"><i class="fas fa-fighter-jet"></i></div>
                 </div>
             </div>
-            <div class="card-body">
-                <div class="details-grid">
-                    <div class="detail-item"><span class="detail-label">Jig Number</span><span id="displayJigNumber" class="detail-value"></span></div>
-                    <div class="detail-item"><span class="detail-label">Sale Orders</span><span id="displaySaleOrders" class="detail-value"></span></div>
-                    <div class="detail-item"><span class="detail-label">Top Assy No.</span><span id="displayTopAssyNo" class="detail-value"></span></div>
+        </header>
+
+        <main class="main-container">
+            <div class="card search-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-search"></i> Tester Jig Search</h2>
+                </div>
+                <div class="card-body">
+                    <div class="search-form">
+                        <div class="input-group">
+                            <i class="fas fa-barcode"></i>
+                            <input type="text" id="jigNumberInput" placeholder="e.g., TJ-706">
+                        </div>
+                        <div class="button-group">
+                            <button id="searchJigBtn" class="btn btn-primary"><i class="fas fa-paper-plane"></i><span>Search</span></button>
+                            <button id="clearBtn" class="btn btn-secondary"><i class="fas fa-undo"></i><span>Clear</span></button>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="card-footer">
-                <button id="shortageListBtn" class="btn btn-primary"><i class="fas fa-list-ul"></i><span>View Parts List</span></button>
-                <button id="sendTelegramAlertBtn" class="btn btn-warning"><i class="fab fa-telegram-plane"></i><span>Send Telegram Alert</span></button>
-                <button id="downloadAllPartsExcelBtn" class="btn btn-success"><i class="fas fa-file-excel"></i><span>Download Excel</span></button>
-            </div>
-        </div>
-    </main>
 
-    <!-- Modal for Parts List (originally shortage list) -->
+            <div id="jigDetailsDisplay" class="card details-card hidden">
+                <div class="card-header">
+                    <h2><i class="fas fa-info-circle"></i> Jig Details</h2>
+                    <div class="status-indicator-box">
+                        <i id="statusIcon" class="fas fa-check-circle"></i>
+                        <span id="displayLaunchingStatus"></span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="details-grid">
+                        <div class="detail-item"><span class="detail-label">Jig Number</span><span id="displayJigNumber" class="detail-value"></span></div>
+                        <div class="detail-item"><span class="detail-label">Sale Orders</span><span id="displaySaleOrders" class="detail-value"></span></div>
+                        <div class="detail-item"><span class="detail-label">Top Assy No.</span><span id="displayTopAssyNo" class="detail-value"></span></div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button id="shortageListBtn" class="btn btn-primary"><i class="fas fa-list-ul"></i><span>View Parts List</span></button>
+                    <button id="sendTelegramAlertBtn" class="btn btn-warning"><i class="fab fa-telegram-plane"></i><span>Send Telegram Alert</span></button>
+                    <button id="downloadAllPartsExcelBtn" class="btn btn-success"><i class="fas fa-file-excel"></i><span>Download Excel</span></button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-logo"><img src="/static/halogo.jpg" alt="HAL"><span>HAL</span></div>
+                <div class="footer-text"><p>© 2024 Hindustan Aeronautics Limited. All rights reserved.</p><p>Tester Delivery Tracking System v2.0</p></div>
+            </div>
+        </footer>
+    </div> <!-- End of pageWrapper -->
+
+    <!-- START: Documentation Sidebar -->
+    <aside id="docsSidebar" class="sidebar">
+        <div class="sidebar-header">
+            <h3><i class="fas fa-book-open"></i> Documentation</h3>
+            <button id="closeSidebarBtn" class="close-btn">&times;</button>
+        </div>
+        <div class="sidebar-content">
+            <p>Documents for Tester Jig: <strong id="sidebarJigNumber"></strong></p>
+            <ul class="doc-list">
+                <li>
+                    <a href="#" class="doc-link" data-doc-type="ATP">
+                        <i class="fas fa-file-signature"></i>
+                        <span>Acceptance Test Procedure (ATP)</span>
+                        <i class="fas fa-external-link-alt link-arrow"></i>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="doc-link" data-doc-type="QTP">
+                        <i class="fas fa-tasks"></i>
+                        <span>Qualification Test Procedure (QTP)</span>
+                        <i class="fas fa-external-link-alt link-arrow"></i>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="doc-link" data-doc-type="QAP">
+                        <i class="fas fa-clipboard-check"></i>
+                        <span>Quality Assurance Plan (QAP)</span>
+                        <i class="fas fa-external-link-alt link-arrow"></i>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </aside>
+    <!-- END: Documentation Sidebar -->
+
+
+    <!-- Modals and Spinner (No changes here) -->
     <div id="shortageListModal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -101,8 +146,6 @@
             </div>
         </div>
     </div>
-    
-    <!-- Generic Alert Modal -->
     <div id="alertModal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header"><h3 id="modalTitle">Alert</h3><button id="closeModal" class="close-btn">&times;</button></div>
@@ -110,8 +153,6 @@
             <div class="modal-actions"><button id="modalOk" class="btn btn-primary"><i class="fas fa-check"></i><span>OK</span></button></div>
         </div>
     </div>
-
-    <!-- Loading Spinner -->
     <div id="loadingSpinner" class="loading-spinner hidden">
         <div class="spinner-container">
             <div class="spinner"><div class="spinner-inner"><i class="fas fa-fighter-jet"></i></div></div>
@@ -119,14 +160,6 @@
         </div>
     </div>
 
-    <footer class="footer">
-        <div class="footer-content">
-            <div class="footer-logo"><img src="/static/halogo.jpg" alt="HAL"><span>HAL</span></div>
-            <div class="footer-text"><p>© 2024 Hindustan Aeronautics Limited. All rights reserved.</p><p>Tester Delivery Tracking System v2.0</p></div>
-        </div>
-    </footer>
-
-    <!-- Correct path for deployment -->
     <script src="/static/script.js"></script>
 </body>
 </html>
