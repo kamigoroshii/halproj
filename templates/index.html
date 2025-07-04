@@ -9,21 +9,25 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- Theme Toggle -->
     <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
         <i class="fas fa-moon"></i>
     </button>
 
-    <!-- Toast Notification Container -->
     <div id="toastContainer" class="toast-container"></div>
+    <div id="alertSentPopup" class="alert-popup hidden">
+        <div class="popup-content">
+            <i class="fas fa-check-circle"></i>
+            <span>Alert Sent</span>
+        </div>
+    </div>
 
-    <!-- Main Page Wrapper -->
+
     <div id="pageWrapper">
         <header class="header">
             <div class="header-content">
                 <div class="company-info">
                     <div class="logo-container">
-                        <img src="https://images.pexels.com/photos/2159/flight-sky-earth-space.jpg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop" alt="HAL Logo" class="header-logo-img">
+                        <img src="/static/halogo.jpg" alt="HAL Logo" class="header-logo-img">
                         <div class="logo-glow"></div>
                     </div>
                     <div class="company-text">
@@ -47,18 +51,13 @@
             <div class="card search-card">
                 <div class="card-header">
                     <h2><i class="fas fa-search"></i> Tester Jig Search</h2>
-                    <div class="search-stats">
-                        <span class="stat-item">
-                            <i class="fas fa-database"></i>
-                            <span>Connected</span>
-                        </span>
-                    </div>
                 </div>
                 <div class="card-body">
                     <div class="search-form">
                         <div class="input-group">
                             <i class="fas fa-barcode input-icon"></i>
-                            <input type="text" id="jigNumberInput" placeholder="Enter Tester Jig Number (e.g., TJ-706)" autocomplete="off">
+                            <input type="text" id="jigNumberInput" list="searchHistory" placeholder="Enter Tester Jig Number (e.g., TJ-706)" autocomplete="off">
+                            <datalist id="searchHistory"></datalist>
                             <div class="input-focus-line"></div>
                         </div>
                         <div class="button-group">
@@ -79,7 +78,7 @@
 
             <div id="jigDetailsDisplay" class="card details-card hidden">
                 <div class="card-header">
-                    <h2><i class="fas fa-info-circle"></i> Jig Details</h2>
+                    <h2><i class="fas fa-info-circle"></i> Tester information</h2>
                     <div class="status-indicator-box">
                         <i id="statusIcon" class="fas fa-check-circle"></i>
                         <span id="displayLaunchingStatus"></span>
@@ -88,31 +87,16 @@
                 <div class="card-body">
                     <div class="details-grid">
                         <div class="detail-item">
-                            <div class="detail-icon">
-                                <i class="fas fa-tag"></i>
-                            </div>
-                            <div class="detail-content">
-                                <span class="detail-label">Jig Number</span>
-                                <span id="displayJigNumber" class="detail-value"></span>
-                            </div>
+                            <div class="detail-icon"><i class="fas fa-tag"></i></div>
+                            <div class="detail-content"><span class="detail-label">Jig Number</span><span id="displayJigNumber" class="detail-value"></span></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-icon">
-                                <i class="fas fa-shopping-cart"></i>
-                            </div>
-                            <div class="detail-content">
-                                <span class="detail-label">Sale Orders</span>
-                                <span id="displaySaleOrders" class="detail-value"></span>
-                            </div>
+                            <div class="detail-icon"><i class="fas fa-shopping-cart"></i></div>
+                            <div class="detail-content"><span class="detail-label">Sale Orders</span><span id="displaySaleOrders" class="detail-value"></span></div>
                         </div>
                         <div class="detail-item">
-                            <div class="detail-icon">
-                                <i class="fas fa-cogs"></i>
-                            </div>
-                            <div class="detail-content">
-                                <span class="detail-label">Top Assy No.</span>
-                                <span id="displayTopAssyNo" class="detail-value"></span>
-                            </div>
+                            <div class="detail-icon"><i class="fas fa-cogs"></i></div>
+                            <div class="detail-content"><span class="detail-label">Top Assy No.</span><span id="displayTopAssyNo" class="detail-value"></span></div>
                         </div>
                     </div>
                 </div>
@@ -120,11 +104,6 @@
                     <button id="shortageListBtn" class="btn btn-primary">
                         <i class="fas fa-list-ul"></i>
                         <span>View Parts List</span>
-                        <div class="btn-ripple"></div>
-                    </button>
-                    <button id="sendTelegramAlertBtn" class="btn btn-warning">
-                        <i class="fab fa-telegram-plane"></i>
-                        <span>Send Alert</span>
                         <div class="btn-ripple"></div>
                     </button>
                     <button id="downloadAllPartsExcelBtn" class="btn btn-success">
@@ -138,19 +117,12 @@
 
         <footer class="footer">
             <div class="footer-content">
-                <div class="footer-logo">
-                    <img src="https://images.pexels.com/photos/2159/flight-sky-earth-space.jpg?auto=compress&cs=tinysrgb&w=50&h=50&fit=crop" alt="HAL">
-                    <span>HAL</span>
-                </div>
-                <div class="footer-text">
-                    <p>© 2024 Hindustan Aeronautics Limited. All rights reserved.</p>
-                    <p>Tester Delivery Tracking System v2.0</p>
-                </div>
+                <div class="footer-logo"><img src="/static/halogo.jpg" alt="HAL"><span>HAL</span></div>
+                <div class="footer-text"><p>© 2024 Hindustan Aeronautics Limited. All rights reserved.</p><p>Tester Delivery Tracking System v2.0</p></div>
             </div>
         </footer>
     </div>
 
-    <!-- Documentation Sidebar -->
     <aside id="docsSidebar" class="sidebar">
         <div class="sidebar-header">
             <h3><i class="fas fa-book-open"></i> Documentation</h3>
@@ -159,52 +131,16 @@
         <div class="sidebar-content">
             <div class="jig-info">
                 <p>Documents for Tester Jig:</p>
-                <div class="jig-number-display">
-                    <strong id="sidebarJigNumber"></strong>
-                </div>
+                <div class="jig-number-display"><strong id="sidebarJigNumber"></strong></div>
             </div>
             <ul class="doc-list">
-                <li>
-                    <a href="#" class="doc-link" data-doc-type="ATP">
-                        <div class="doc-icon">
-                            <i class="fas fa-file-signature"></i>
-                        </div>
-                        <div class="doc-content">
-                            <span class="doc-title">Acceptance Test Procedure</span>
-                            <span class="doc-subtitle">ATP Document</span>
-                        </div>
-                        <i class="fas fa-external-link-alt link-arrow"></i>
-                    </a>
-                </li>
-                <li>
-                    <a href="#" class="doc-link" data-doc-type="QTP">
-                        <div class="doc-icon">
-                            <i class="fas fa-tasks"></i>
-                        </div>
-                        <div class="doc-content">
-                            <span class="doc-title">Qualification Test Procedure</span>
-                            <span class="doc-subtitle">QTP Document</span>
-                        </div>
-                        <i class="fas fa-external-link-alt link-arrow"></i>
-                    </a>
-                </li>
-                <li>
-                    <a href="#" class="doc-link" data-doc-type="QAP">
-                        <div class="doc-icon">
-                            <i class="fas fa-clipboard-check"></i>
-                        </div>
-                        <div class="doc-content">
-                            <span class="doc-title">Quality Assurance Plan</span>
-                            <span class="doc-subtitle">QAP Document</span>
-                        </div>
-                        <i class="fas fa-external-link-alt link-arrow"></i>
-                    </a>
-                </li>
+                <li><a href="#" class="doc-link" data-doc-type="ATP"><div class="doc-icon"><i class="fas fa-file-signature"></i></div><div class="doc-content"><span class="doc-title">Acceptance Test Procedure</span><span class="doc-subtitle">ATP Document</span></div><i class="fas fa-external-link-alt link-arrow"></i></a></li>
+                <li><a href="#" class="doc-link" data-doc-type="QTP"><div class="doc-icon"><i class="fas fa-tasks"></i></div><div class="doc-content"><span class="doc-title">Qualification Test Procedure</span><span class="doc-subtitle">QTP Document</span></div><i class="fas fa-external-link-alt link-arrow"></i></a></li>
+                <li><a href="#" class="doc-link" data-doc-type="QAP"><div class="doc-icon"><i class="fas fa-clipboard-check"></i></div><div class="doc-content"><span class="doc-title">Quality Assurance Plan</span><span class="doc-subtitle">QAP Document</span></div><i class="fas fa-external-link-alt link-arrow"></i></a></li>
             </ul>
         </div>
     </aside>
 
-    <!-- Modals -->
     <div id="shortageListModal" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -212,66 +148,29 @@
                 <button id="closeShortageModal" class="close-btn">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="sale-order-selector">
-                    <label for="shortageSaleOrderSelect">Select Sale Order:</label>
-                    <select id="shortageSaleOrderSelect"></select>
-                </div>
+                <div class="sale-order-selector"><label for="shortageSaleOrderSelect">Select Sale Order:</label><select id="shortageSaleOrderSelect"></select></div>
                 <p id="noShortageMessage" class="hidden">No parts found for this selection.</p>
                 <div class="table-container">
                     <table class="shortage-table">
-                        <thead>
-                            <tr>
-                                <th>Part Number</th>
-                                <th>Description</th>
-                                <th>Required</th>
-                                <th>Available</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Part Number</th><th>Description</th><th>Required</th><th>Available</th><th>Status</th></tr></thead>
                         <tbody id="shortageTableBody"></tbody>
                     </table>
                 </div>
             </div>
-            <div class="modal-actions">
-                <button id="shortageModalOk" class="btn btn-primary">
-                    <i class="fas fa-check"></i>
-                    <span>OK</span>
-                    <div class="btn-ripple"></div>
-                </button>
-            </div>
+            <div class="modal-actions"><button id="shortageModalOk" class="btn btn-primary"><i class="fas fa-check"></i><span>OK</span><div class="btn-ripple"></div></button></div>
         </div>
     </div>
-
     <div id="alertModal" class="modal-overlay hidden">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Alert</h3>
-                <button id="closeModal" class="close-btn">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p id="modalMessage"></p>
-            </div>
-            <div class="modal-actions">
-                <button id="modalOk" class="btn btn-primary">
-                    <i class="fas fa-check"></i>
-                    <span>OK</span>
-                    <div class="btn-ripple"></div>
-                </button>
-            </div>
+            <div class="modal-header"><h3 id="modalTitle">Alert</h3><button id="closeModal" class="close-btn">&times;</button></div>
+            <div class="modal-body"><p id="modalMessage"></p></div>
+            <div class="modal-actions"><button id="modalOk" class="btn btn-primary"><i class="fas fa-check"></i><span>OK</span><div class="btn-ripple"></div></button></div>
         </div>
     </div>
-
     <div id="loadingSpinner" class="loading-spinner hidden">
         <div class="spinner-container">
-            <div class="spinner">
-                <div class="spinner-inner">
-                    <i class="fas fa-fighter-jet"></i>
-                </div>
-            </div>
-            <div class="loading-text">
-                <h3>Processing Request</h3>
-                <p>Accessing HAL database...</p>
-            </div>
+            <div class="spinner"><div class="spinner-inner"><i class="fas fa-fighter-jet"></i></div></div>
+            <div class="loading-text"><h3>Processing Request</h3><p>Accessing HAL database...</p></div>
         </div>
     </div>
 

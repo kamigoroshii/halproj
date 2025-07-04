@@ -27,7 +27,7 @@ OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
 
 def transform_data(input_configs, output_path):
     """
-    Reads multiple Excel files, using original logic and the new "Not Launched" status.
+    Reads multiple Excel files and calculates the final status on the combined data.
     """
     print("Attempting to transform data from multiple sources.")
     print(f"Output will be saved to: {output_path}")
@@ -43,7 +43,7 @@ def transform_data(input_configs, output_path):
             df = pd.read_excel(file_path, sheet_name=0, engine='openpyxl')
             df.columns = [re.sub(r'\s+', '', str(c)).lower() for c in df.columns]
 
-            # --- Robust Column Handling ---
+            # --- Column Handling ---
             part_no_col = next((col for col in ['subassemblyorpartno', 'partno'] if col in df.columns), 'description')
             df['part_number'] = df.get(part_no_col, 'N/A').astype(str)
 
@@ -67,6 +67,7 @@ def transform_data(input_configs, output_path):
             df['officialIncharge'] = df.get('officialincharge', '+91-0000000000')
             df['sale_order'] = sale_order
 
+            # Calculate availability per part
             conditions = [
                 (df['requiredQuantity'] <= 0),
                 (df['currentStock'] == df['requiredQuantity']),
@@ -76,13 +77,7 @@ def transform_data(input_configs, output_path):
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
 
-            # --- START: Updated Status Logic ---
-            # If ANY part for a jig has a 'Shortage', the entire jig's status is 'Not Launched'.
-            df['status'] = df.groupby('tester_jig_number')['availability_status'].transform(
-                lambda x: 'Not Launched' if (x == 'Shortage').any() else 'Ready for Launch'
-            )
-            # --- END: Updated Status Logic ---
-
+            # We will calculate the overall 'status' later, on the combined dataframe
             all_dfs.append(df)
 
         except FileNotFoundError:
@@ -95,7 +90,16 @@ def transform_data(input_configs, output_path):
         print("FATAL ERROR: No dataframes were successfully processed.")
         sys.exit(1)
 
+    # Combine all dataframes first
     final_combined_df = pd.concat(all_dfs, ignore_index=True)
+
+    # --- START: Corrected Global Status Calculation ---
+    # Now, calculate the overall status on the complete, combined dataset.
+    print("\nCalculating final launch status across all sale orders...")
+    final_combined_df['status'] = final_combined_df.groupby('tester_jig_number')['availability_status'].transform(
+        lambda x: 'Not Launched' if (x == 'Shortage').any() else 'Ready for Launch'
+    )
+    # --- END: Corrected Global Status Calculation ---
 
     final_cols = [
         'testerId', 'tester_jig_number', 'sale_order', 'top_assy_no', 'part_number', 'unitName',
