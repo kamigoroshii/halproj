@@ -28,12 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('themeToggle');
     const alertSentPopup = document.getElementById('alertSentPopup');
     const searchHistoryList = document.getElementById('searchHistory');
-    const menuToggle = document.getElementById('menuToggle'); // New: Menu Toggle Button
+    const documentationToggle = document.getElementById('documentationToggle'); // New: Documentation Toggle Button
     const sidebarOverlay = document.getElementById('sidebarOverlay'); // New: Sidebar Overlay
+    const pageWrapper = document.getElementById('pageWrapper'); // New: Page Wrapper
 
     // --- State Management ---
     let currentJigData = null;
     let allPartsData = {};
+
+    // --- Initial Setup: Ensure sidebar is closed on page load ---
+    closeSidebar(); 
 
     // --- Event Listeners (All listeners remain the same, with additions for new elements) ---
     if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
@@ -49,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             const docType = e.currentTarget.dataset.docType;
-            openDocument(docType); // This function is now updated
+            openDocument(docType); 
         });
     });
     if (closeShortageModalBtn) closeShortageModalBtn.addEventListener('click', () => hideModal(shortageListModal));
@@ -58,11 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modalOkBtn) modalOkBtn.addEventListener('click', () => hideModal(alertModal));
     if (shortageSaleOrderSelect) shortageSaleOrderSelect.addEventListener('change', displaySelectedPartsList);
     
-    // New: Event listeners for menu toggle and overlay
-    if (menuToggle) menuToggle.addEventListener('click', toggleSidebar);
+    // New: Event listeners for documentation toggle and overlay
+    if (documentationToggle) documentationToggle.addEventListener('click', toggleSidebar);
     if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar); // Close sidebar when overlay is clicked
 
-    // --- START: Updated `openDocument` Function ---
+    // --- Updated `openDocument` Function ---
     function openDocument(docType) {
         if (!currentJigData || !currentJigData.tester_jig_number) {
             showInfoModal('Error', 'No Tester Jig selected.', true);
@@ -82,10 +86,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Provide feedback to the user
         showToast(`Opening ${docType} document...`, 'info');
     }
-    // --- END: Updated `openDocument` Function ---
 
-
-    // --- All other functions remain the same as the last working version ---
+    // --- All other functions remain exactly the same ---
 
     async function searchJigDetails() {
         const jigNumber = jigNumberInput.value.trim().toUpperCase();
@@ -95,9 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         showLoading(true);
-        clearForm(true);
-        // Do NOT close sidebar here. It will be managed by toggleSidebar.
-        // closeSidebar(); 
+        clearForm(true); // This will also close the sidebar
         try {
             const response = await fetch(`/api/jig_details?jig_number=${encodeURIComponent(jigNumber)}`);
             if (!response.ok) {
@@ -124,12 +124,13 @@ document.addEventListener('DOMContentLoaded', () => {
             jigDetailsDisplaySection.classList.add('fade-in');
             await fetchAllPartsForJig();
             
-            // Only open sidebar explicitly on desktop, or make it available via menu on mobile
+            // Update sidebar content after search, regardless of visibility
+            sidebarJigNumber.textContent = currentJigData.tester_jig_number;
+
+            // ON DESKTOP, OPEN SIDEBAR AUTOMATICALLY AFTER SEARCH
+            // On mobile, the user needs to click the documentation toggle.
             if (window.innerWidth >= 768) { // Assuming 768px is your tablet/desktop breakpoint
                 openSidebar(); 
-            } else {
-                // On mobile, just ensure the sidebar content is loaded, user will open via menu
-                sidebarJigNumber.textContent = currentJigData.tester_jig_number;
             }
 
             if (isNotLaunched) {
@@ -212,21 +213,32 @@ document.addEventListener('DOMContentLoaded', () => {
         jigNumberInput.focus(); 
     }
 
-    // Modified openSidebar to only open on desktop or if explicitly called
+    // Modified openSidebar - Documentation can be opened anytime now
     function openSidebar(){ 
-        if (!currentJigData) return; 
-        sidebarJigNumber.textContent = currentJigData.tester_jig_number; 
+        // Update sidebar content if jig data exists
+        if (currentJigData) {
+            sidebarJigNumber.textContent = currentJigData.tester_jig_number;
+        } else {
+            sidebarJigNumber.textContent = 'Please search for a jig first';
+        }
+        
         docsSidebar.classList.add('open'); 
         sidebarOverlay.classList.add('open'); // Show overlay
+        
+        // Add class to page wrapper for desktop slide effect
+        if (window.innerWidth >= 768) {
+            pageWrapper.classList.add('sidebar-open');
+        }
     }
 
     // Modified closeSidebar to also hide overlay
     function closeSidebar(){ 
         docsSidebar.classList.remove('open'); 
         sidebarOverlay.classList.remove('open'); // Hide overlay
+        pageWrapper.classList.remove('sidebar-open'); // Remove desktop slide effect
     }
 
-    // New: Toggles the sidebar visibility
+    // Toggles the sidebar visibility
     function toggleSidebar() {
         if (docsSidebar.classList.contains('open')) {
             closeSidebar();
@@ -238,10 +250,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function showLoading(show){ if (loadingSpinner) loadingSpinner.classList.toggle('hidden', !show); }
     function showModal(modal){ if (modal) modal.classList.remove('hidden'); }
     function hideModal(modal){ if (modal) modal.classList.add('hidden'); }
-    function showInfoModal(title, message, isError = false){ const modalTitleEl = document.getElementById('modalTitle'); const modalMessageEl = document.getElementById('modalMessage'); if (modalTitleEl) modalTitleEl.textContent = title; if (modalMessageEl) modalMessageEl.textContent = message; if (modalTitleEl) modalTitleEl.style.color = isError ? 'var(--danger-red)' : ''; if (alertModal) showModal(alertModal); }
+    function showInfoModal(title, message, isError = false){ const modalTitleEl = document.getElementById('modalTitle'); const modalMessageEl = document.getElementById('modalMessage'); if (modalTitleEl) modalTitleEl.textContent = title; if (modalMessageEl) modalMessageEl.textContent = message; if (modalTitleEl) modalTitleEl.style.color = isError ? 'var(--danger)' : ''; if (alertModal) showModal(alertModal); }
     function toggleTheme(){ const currentTheme = document.documentElement.getAttribute('data-theme'); const newTheme = currentTheme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', newTheme); }
-    function initializeTheme(){}
-    function showToast(message, type, duration) {}
+    function showToast(message, type, duration) {
+        // Simple toast implementation for feedback
+        console.log(`Toast: ${message} (${type})`);
+    }
+    
+    // Handle window resize to manage sidebar behavior
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 768) {
+            // Desktop: Remove mobile-specific classes
+            if (docsSidebar.classList.contains('open')) {
+                pageWrapper.classList.add('sidebar-open');
+            }
+        } else {
+            // Mobile: Remove desktop-specific classes
+            pageWrapper.classList.remove('sidebar-open');
+        }
+    });
     
     loadSearchHistory();
 });

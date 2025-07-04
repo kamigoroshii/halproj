@@ -150,6 +150,37 @@ body {
     font-size: 1.25rem;
 }
 
+/* Documentation Toggle Button - Always Visible */
+.documentation-toggle {
+    position: fixed;
+    top: var(--space-6);
+    left: var(--space-6);
+    z-index: 9999;
+    background: var(--primary-blue);
+    border: 1px solid var(--primary-blue-light);
+    border-radius: var(--radius-lg);
+    color: white;
+    padding: var(--space-3) var(--space-4);
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    transition: all var(--transition-normal);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.documentation-toggle:hover {
+    background: var(--primary-blue-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+}
+
+.documentation-toggle i {
+    font-size: 1rem;
+}
+
 /* Toast Notifications */
 .toast-container {
     position: fixed;
@@ -228,25 +259,47 @@ body {
     font-size: 1.5rem;
 }
 
+/* Sidebar Overlay */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 1050;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition-normal);
+}
 
-/* Layout */
-#pageWrapper {
-    transition: transform var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+.sidebar-overlay.open {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* App Container */
+.app-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* Page Wrapper */
+.page-wrapper {
     flex: 1;
     display: flex;
     flex-direction: column;
+    transition: transform var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Removed transform from #pageWrapper.sidebar-open as sidebar will now overlay */
-
-.main-container {
-    flex: 1;
-    max-width: 1000px;
-    margin: var(--space-8) auto;
-    padding: 0 var(--space-6);
-    display: grid;
-    gap: var(--space-8);
-    width: 100%;
+/* When sidebar is open on desktop, push main content slightly */
+@media (min-width: 768px) {
+    .page-wrapper.sidebar-open {
+        transform: translateX(-200px);
+    }
 }
 
 /* Header */
@@ -309,14 +362,14 @@ body {
 .company-text h1 {
     font-size: 1.875rem;
     font-weight: 700;
-    color: white;
+    color:rgb(220, 108, 68);
     margin: 0;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .tagline {
     font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgb(220, 108, 68);
     margin: 0;
 }
 
@@ -358,7 +411,7 @@ body {
 
 .hal-emblem i {
     font-size: 2.5rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(185, 95, 22, 0.9);
     animation: jet-hover 3s ease-in-out infinite;
 }
 
@@ -367,23 +420,16 @@ body {
     50% { transform: translateY(-5px); }
 }
 
-/* Menu Toggle Button (Hamburger) */
-.menu-toggle {
-    display: none; /* Hidden by default on desktop */
-    background: none;
-    border: none;
-    color: white;
-    font-size: 1.8rem;
-    cursor: pointer;
-    padding: var(--space-2);
-    transition: transform var(--transition-fast);
-    z-index: 1001; /* Ensure it's above other header elements if needed */
+/* Main Container */
+.main-container {
+    flex: 1;
+    max-width: 1000px;
+    margin: var(--space-8) auto;
+    padding: 0 var(--space-6);
+    display: grid;
+    gap: var(--space-8);
+    width: 100%;
 }
-
-.menu-toggle:hover {
-    transform: scale(1.1);
-}
-
 
 /* Cards */
 .card {
@@ -407,8 +453,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap; /* Allow wrapping on smaller screens */
-    gap: var(--space-3); /* Space between items in header */
+    flex-wrap: wrap;
+    gap: var(--space-3);
 }
 
 .card-header h2 {
@@ -454,7 +500,7 @@ body {
     display: flex;
     gap: var(--space-4);
     justify-content: flex-end;
-    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+    flex-wrap: wrap;
 }
 
 /* Form Styles */
@@ -522,7 +568,7 @@ body {
     display: flex;
     gap: var(--space-4);
     justify-content: flex-end;
-    flex-wrap: wrap; /* Allow buttons to wrap */
+    flex-wrap: wrap;
 }
 
 /* Enhanced Buttons */
@@ -542,7 +588,7 @@ body {
     text-decoration: none;
     min-width: 120px;
     justify-content: center;
-    flex-grow: 1; /* Allow buttons to grow and fill space in wrapped layouts */
+    flex-grow: 1;
 }
 
 .btn-ripple {
@@ -692,47 +738,27 @@ body {
     box-shadow: var(--shadow-md);
 }
 
-/* Sidebar and Overlay */
+/* Enhanced Professional Sidebar */
 .sidebar {
     position: fixed;
     top: 0;
     right: 0;
-    width: 420px; /* Fixed width for desktop */
+    width: 420px;
     height: 100%;
     background: var(--sidebar-bg);
     color: var(--sidebar-text);
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
-    transform: translateX(100%); /* Off-screen by default */
+    transform: translateX(100%);
     transition: transform var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1100;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--sidebar-border);
     backdrop-filter: blur(20px);
-    visibility: hidden; /* Hidden by default */
 }
 
 .sidebar.open {
-    transform: translateX(0); /* Slide in */
-    visibility: visible; /* Make visible */
-}
-
-.sidebar-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5); /* Dim background */
-    z-index: 1099; /* Below sidebar, above main content */
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity var(--transition-normal);
-}
-
-.sidebar-overlay.open {
-    opacity: 1;
-    visibility: visible;
+    transform: translateX(0);
 }
 
 .sidebar-header {
@@ -1021,7 +1047,7 @@ body {
 .modal-content {
     background: var(--card-bg);
     border-radius: var(--radius-xl);
-    width: 90%; /* Responsive width */
+    width: 90%;
     max-width: 900px;
     max-height: 90vh;
     display: flex;
@@ -1030,7 +1056,7 @@ body {
     border: 1px solid var(--border-color);
     transform: scale(0.9);
     transition: transform var(--transition-normal);
-    margin: var(--space-4); /* Add margin for small screens */
+    margin: var(--space-4);
 }
 
 .modal-overlay:not(.hidden) .modal-content {
@@ -1045,7 +1071,7 @@ body {
     align-items: center;
     background: var(--bg-tertiary);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    flex-wrap: wrap; /* Allow wrapping */
+    flex-wrap: wrap;
     gap: var(--space-3);
 }
 
@@ -1073,7 +1099,7 @@ body {
     gap: var(--space-4);
     background: var(--bg-tertiary);
     border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-    flex-wrap: wrap; /* Allow wrapping */
+    flex-wrap: wrap;
 }
 
 /* Table Styles */
@@ -1105,14 +1131,14 @@ body {
 }
 
 .table-container {
-    overflow-x: auto; /* Enable horizontal scrolling for tables */
+    overflow-x: auto;
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-color);
 }
 
 .shortage-table {
     width: 100%;
-    min-width: 600px; /* Ensure table doesn't shrink too much, allowing scroll */
+    min-width: 600px;
     border-collapse: collapse;
     background: var(--card-bg);
 }
@@ -1310,8 +1336,19 @@ body {
 
 /* Responsive Design Breakpoints */
 
-/* Extra Small Devices (Mobile Portrait, < 576px) */
+/* Mobile Portrait (< 576px) */
 @media (max-width: 575.98px) {
+    .documentation-toggle {
+        top: var(--space-4);
+        left: var(--space-4);
+        padding: var(--space-2) var(--space-3);
+        font-size: 0.75rem;
+    }
+
+    .documentation-toggle span {
+        display: none; /* Hide text on very small screens */
+    }
+
     .theme-toggle {
         top: var(--space-4);
         right: var(--space-4);
@@ -1322,7 +1359,7 @@ body {
     .toast-container {
         top: var(--space-4);
         right: var(--space-4);
-        left: var(--space-4); /* Center toasts on small screens */
+        left: var(--space-4);
         max-width: unset;
         align-items: center;
     }
@@ -1345,6 +1382,7 @@ body {
     
     .company-text h1 {
         font-size: 1.25rem;
+        color: rgb(220, 108, 68);
     }
     
     .tagline {
@@ -1364,18 +1402,6 @@ body {
     .hal-emblem i {
         font-size: 2rem;
     }
-
-    /* Show menu toggle on mobile */
-    .menu-toggle {
-        display: flex;
-        order: 1; /* Place it before company info for better mobile layout */
-        margin-right: auto; /* Push it to the left */
-    }
-
-    /* Hide header-status on very small screens to make space, if needed */
-    .header-status {
-        display: none;
-    }
     
     .main-container {
         margin: var(--space-4) auto;
@@ -1391,7 +1417,7 @@ body {
 
     .card-header h2 {
         font-size: 1.25rem;
-        flex-basis: 100%; /* Ensure title takes full width */
+        flex-basis: 100%;
         justify-content: center;
     }
 
@@ -1404,7 +1430,7 @@ body {
         flex-direction: column;
         text-align: center;
         gap: var(--space-3);
-        padding: var(--space-4); /* Smaller padding */
+        padding: var(--space-4);
     }
 
     .detail-icon {
@@ -1427,18 +1453,16 @@ body {
     }
 
     .btn {
-        min-width: unset; /* Remove min-width for full flexibility */
-        width: 100%; /* Take full width on small screens */
+        min-width: unset;
+        width: 100%;
         font-size: 0.9rem;
         padding: var(--space-3) var(--space-4);
     }
     
     .sidebar {
-        width: 80%; /* Take 80% width on mobile */
-        max-width: 300px; /* Cap max width for very large phones in portrait */
+        width: 100%;
+        max-width: 100%;
     }
-    
-    /* Removed #pageWrapper.sidebar-open transform here */
 
     .sidebar-header {
         padding: var(--space-6) var(--space-4);
@@ -1463,7 +1487,7 @@ body {
 
     .doc-link {
         padding: var(--space-4);
-        flex-direction: column; /* Stack icon and content */
+        flex-direction: column;
         align-items: center;
         text-align: center;
     }
@@ -1504,7 +1528,7 @@ body {
     }
 
     .shortage-table {
-        min-width: 500px; /* Keep a minimum width for table scroll */
+        min-width: 500px;
     }
 
     .spinner-container {
@@ -1516,8 +1540,13 @@ body {
     }
 }
 
-/* Small Devices (Mobile Landscape, 576px - 767.98px) */
+/* Mobile Landscape (576px - 767.98px) */
 @media (min-width: 576px) and (max-width: 767.98px) {
+    .documentation-toggle {
+        top: var(--space-5);
+        left: var(--space-5);
+    }
+
     .theme-toggle {
         top: var(--space-5);
         right: var(--space-5);
@@ -1532,29 +1561,20 @@ body {
     }
     
     .header-content {
-        flex-direction: row; /* Keep header content in a row */
+        flex-direction: row;
         flex-wrap: wrap;
-        justify-content: space-between; /* Distribute items */
+        justify-content: center;
         gap: var(--space-4);
     }
 
-    .company-info {
-        flex-basis: auto; /* Allow it to shrink */
+    .company-info, .header-status {
+        flex-basis: 100%;
+        justify-content: center;
     }
     
     .company-text h1 {
         font-size: 1.5rem;
-    }
-    
-    /* Show menu toggle on mobile */
-    .menu-toggle {
-        display: flex;
-    }
-
-    .header-status {
-        order: 3; /* Push status to the next line if needed */
-        flex-basis: 100%;
-        justify-content: center;
+        color: rgb(220, 108, 68);
     }
     
     .main-container {
@@ -1573,21 +1593,19 @@ body {
     }
 
     .button-group {
-        flex-direction: row; /* Keep buttons in a row */
+        flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
     }
 
     .btn {
-        flex-grow: 1; /* Allow buttons to grow */
-        max-width: 48%; /* Adjust for two columns */
+        flex-grow: 1;
+        max-width: 48%;
     }
     
     .sidebar {
-        width: 320px; /* Slightly narrower sidebar */
+        width: 320px;
     }
-    
-    /* Removed #pageWrapper.sidebar-open transform here */
 
     .modal-content {
         width: 90%;
@@ -1595,12 +1613,17 @@ body {
     }
 
     .shortage-table {
-        min-width: 600px; /* Maintain minimum width for scroll */
+        min-width: 600px;
     }
 }
 
-/* Medium Devices (Tablets, 768px - 991.98px) */
+/* Tablet (768px - 991.98px) */
 @media (min-width: 768px) and (max-width: 991.98px) {
+    .documentation-toggle {
+        top: var(--space-6);
+        left: var(--space-6);
+    }
+
     .theme-toggle {
         top: var(--space-6);
         right: var(--space-6);
@@ -1616,11 +1639,7 @@ body {
 
     .company-text h1 {
         font-size: 1.75rem;
-    }
-
-    /* Hide menu toggle on desktop */
-    .menu-toggle {
-        display: none;
+        color: rgb(220, 108, 68);
     }
 
     .main-container {
@@ -1629,25 +1648,21 @@ body {
     }
 
     .card-header {
-        flex-wrap: nowrap; /* Prevent wrapping in card header */
+        flex-wrap: nowrap;
     }
 
     .button-group {
-        flex-wrap: nowrap; /* Prevent wrapping in button group */
+        flex-wrap: nowrap;
     }
 
     .btn {
-        flex-grow: 0; /* Don't grow too much */
+        flex-grow: 0;
         min-width: 140px;
     }
 
     .sidebar {
-        width: 420px; /* Full width sidebar */
-        transform: translateX(0); /* Always visible */
-        visibility: visible;
+        width: 380px;
     }
-    
-    /* Removed #pageWrapper.sidebar-open transform here */
 
     .modal-content {
         width: 80%;
@@ -1655,42 +1670,26 @@ body {
     }
 }
 
-/* Large Devices (Desktops, 992px - 1199.98px) */
-@media (min-width: 992px) and (max-width: 1199.98px) {
-    /* Hide menu toggle on desktop */
-    .menu-toggle {
-        display: none;
+/* Desktop (992px+) */
+@media (min-width: 992px) {
+    .documentation-toggle {
+        top: var(--space-6);
+        left: var(--space-6);
     }
-    /* Adjustments for larger desktops, if needed */
+
     .main-container {
         padding: 0 var(--space-8);
     }
-    .sidebar {
-        width: 420px; /* Full width sidebar */
-        transform: translateX(0); /* Always visible */
-        visibility: visible;
-    }
 }
 
-/* Extra Large Devices (Large Desktops, >= 1200px) */
+/* Large Desktop (1200px+) */
 @media (min-width: 1200px) {
-    /* Hide menu toggle on desktop */
-    .menu-toggle {
-        display: none;
-    }
-    /* Default styles already cater to this, but specific enhancements can go here */
     .header-content,
     .main-container,
     .footer-content {
-        max-width: 1200px; /* Ensure content stays within a max width */
-    }
-    .sidebar {
-        width: 420px; /* Full width sidebar */
-        transform: translateX(0); /* Always visible */
-        visibility: visible;
+        max-width: 1200px;
     }
 }
-
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {
@@ -1724,5 +1723,6 @@ body {
     
     .hal-emblem i {
         animation: none;
+        color: orange;
     }
 }
