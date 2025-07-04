@@ -237,10 +237,7 @@ body {
     flex-direction: column;
 }
 
-/* When sidebar is open, push main content slightly */
-#pageWrapper.sidebar-open {
-    transform: translateX(-420px); /* Adjust based on sidebar width */
-}
+/* Removed transform from #pageWrapper.sidebar-open as sidebar will now overlay */
 
 .main-container {
     flex: 1;
@@ -369,6 +366,24 @@ body {
     0%, 100% { transform: translateY(0px); }
     50% { transform: translateY(-5px); }
 }
+
+/* Menu Toggle Button (Hamburger) */
+.menu-toggle {
+    display: none; /* Hidden by default on desktop */
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: var(--space-2);
+    transition: transform var(--transition-fast);
+    z-index: 1001; /* Ensure it's above other header elements if needed */
+}
+
+.menu-toggle:hover {
+    transform: scale(1.1);
+}
+
 
 /* Cards */
 .card {
@@ -677,28 +692,47 @@ body {
     box-shadow: var(--shadow-md);
 }
 
-/* Enhanced Professional Sidebar */
+/* Sidebar and Overlay */
 .sidebar {
     position: fixed;
     top: 0;
     right: 0;
     width: 420px; /* Fixed width for desktop */
-    max-width: 90%; /* Max width for smaller screens */
     height: 100%;
     background: var(--sidebar-bg);
     color: var(--sidebar-text);
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
-    transform: translateX(100%);
+    transform: translateX(100%); /* Off-screen by default */
     transition: transform var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1100;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--sidebar-border);
     backdrop-filter: blur(20px);
+    visibility: hidden; /* Hidden by default */
 }
 
 .sidebar.open {
-    transform: translateX(0);
+    transform: translateX(0); /* Slide in */
+    visibility: visible; /* Make visible */
+}
+
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5); /* Dim background */
+    z-index: 1099; /* Below sidebar, above main content */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--transition-normal);
+}
+
+.sidebar-overlay.open {
+    opacity: 1;
+    visibility: visible;
 }
 
 .sidebar-header {
@@ -1330,6 +1364,18 @@ body {
     .hal-emblem i {
         font-size: 2rem;
     }
+
+    /* Show menu toggle on mobile */
+    .menu-toggle {
+        display: flex;
+        order: 1; /* Place it before company info for better mobile layout */
+        margin-right: auto; /* Push it to the left */
+    }
+
+    /* Hide header-status on very small screens to make space, if needed */
+    .header-status {
+        display: none;
+    }
     
     .main-container {
         margin: var(--space-4) auto;
@@ -1388,13 +1434,11 @@ body {
     }
     
     .sidebar {
-        width: 100%; /* Full width on mobile */
-        max-width: 100%;
+        width: 80%; /* Take 80% width on mobile */
+        max-width: 300px; /* Cap max width for very large phones in portrait */
     }
     
-    #pageWrapper.sidebar-open {
-        transform: translateX(-100%); /* Adjust to slide off screen */
-    }
+    /* Removed #pageWrapper.sidebar-open transform here */
 
     .sidebar-header {
         padding: var(--space-6) var(--space-4);
@@ -1490,17 +1534,27 @@ body {
     .header-content {
         flex-direction: row; /* Keep header content in a row */
         flex-wrap: wrap;
-        justify-content: center;
+        justify-content: space-between; /* Distribute items */
         gap: var(--space-4);
     }
 
-    .company-info, .header-status {
-        flex-basis: 100%; /* Take full width */
-        justify-content: center;
+    .company-info {
+        flex-basis: auto; /* Allow it to shrink */
     }
     
     .company-text h1 {
         font-size: 1.5rem;
+    }
+    
+    /* Show menu toggle on mobile */
+    .menu-toggle {
+        display: flex;
+    }
+
+    .header-status {
+        order: 3; /* Push status to the next line if needed */
+        flex-basis: 100%;
+        justify-content: center;
     }
     
     .main-container {
@@ -1533,9 +1587,7 @@ body {
         width: 320px; /* Slightly narrower sidebar */
     }
     
-    #pageWrapper.sidebar-open {
-        transform: translateX(-320px);
-    }
+    /* Removed #pageWrapper.sidebar-open transform here */
 
     .modal-content {
         width: 90%;
@@ -1566,6 +1618,11 @@ body {
         font-size: 1.75rem;
     }
 
+    /* Hide menu toggle on desktop */
+    .menu-toggle {
+        display: none;
+    }
+
     .main-container {
         margin: var(--space-8) auto;
         padding: 0 var(--space-6);
@@ -1585,12 +1642,12 @@ body {
     }
 
     .sidebar {
-        width: 380px; /* Slightly narrower sidebar */
+        width: 420px; /* Full width sidebar */
+        transform: translateX(0); /* Always visible */
+        visibility: visible;
     }
     
-    #pageWrapper.sidebar-open {
-        transform: translateX(-380px);
-    }
+    /* Removed #pageWrapper.sidebar-open transform here */
 
     .modal-content {
         width: 80%;
@@ -1600,19 +1657,37 @@ body {
 
 /* Large Devices (Desktops, 992px - 1199.98px) */
 @media (min-width: 992px) and (max-width: 1199.98px) {
+    /* Hide menu toggle on desktop */
+    .menu-toggle {
+        display: none;
+    }
     /* Adjustments for larger desktops, if needed */
     .main-container {
         padding: 0 var(--space-8);
+    }
+    .sidebar {
+        width: 420px; /* Full width sidebar */
+        transform: translateX(0); /* Always visible */
+        visibility: visible;
     }
 }
 
 /* Extra Large Devices (Large Desktops, >= 1200px) */
 @media (min-width: 1200px) {
+    /* Hide menu toggle on desktop */
+    .menu-toggle {
+        display: none;
+    }
     /* Default styles already cater to this, but specific enhancements can go here */
     .header-content,
     .main-container,
     .footer-content {
         max-width: 1200px; /* Ensure content stays within a max width */
+    }
+    .sidebar {
+        width: 420px; /* Full width sidebar */
+        transform: translateX(0); /* Always visible */
+        visibility: visible;
     }
 }
 

@@ -28,12 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('themeToggle');
     const alertSentPopup = document.getElementById('alertSentPopup');
     const searchHistoryList = document.getElementById('searchHistory');
+    const menuToggle = document.getElementById('menuToggle'); // New: Menu Toggle Button
+    const sidebarOverlay = document.getElementById('sidebarOverlay'); // New: Sidebar Overlay
 
     // --- State Management ---
     let currentJigData = null;
     let allPartsData = {};
 
-    // --- Event Listeners (All listeners remain the same) ---
+    // --- Event Listeners (All listeners remain the same, with additions for new elements) ---
     if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
     if (searchJigBtn) searchJigBtn.addEventListener('click', searchJigDetails);
     if (jigNumberInput) jigNumberInput.addEventListener('keydown', (e) => {
@@ -55,6 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeModalBtn) closeModalBtn.addEventListener('click', () => hideModal(alertModal));
     if (modalOkBtn) modalOkBtn.addEventListener('click', () => hideModal(alertModal));
     if (shortageSaleOrderSelect) shortageSaleOrderSelect.addEventListener('change', displaySelectedPartsList);
+    
+    // New: Event listeners for menu toggle and overlay
+    if (menuToggle) menuToggle.addEventListener('click', toggleSidebar);
+    if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar); // Close sidebar when overlay is clicked
 
     // --- START: Updated `openDocument` Function ---
     function openDocument(docType) {
@@ -90,7 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         showLoading(true);
         clearForm(true);
-        closeSidebar();
+        // Do NOT close sidebar here. It will be managed by toggleSidebar.
+        // closeSidebar(); 
         try {
             const response = await fetch(`/api/jig_details?jig_number=${encodeURIComponent(jigNumber)}`);
             if (!response.ok) {
@@ -116,7 +123,15 @@ document.addEventListener('DOMContentLoaded', () => {
             jigDetailsDisplaySection.classList.remove('hidden');
             jigDetailsDisplaySection.classList.add('fade-in');
             await fetchAllPartsForJig();
-            openSidebar();
+            
+            // Only open sidebar explicitly on desktop, or make it available via menu on mobile
+            if (window.innerWidth >= 768) { // Assuming 768px is your tablet/desktop breakpoint
+                openSidebar(); 
+            } else {
+                // On mobile, just ensure the sidebar content is loaded, user will open via menu
+                sidebarJigNumber.textContent = currentJigData.tester_jig_number;
+            }
+
             if (isNotLaunched) {
                 await sendTelegramAlert();
             }
@@ -188,9 +203,38 @@ document.addEventListener('DOMContentLoaded', () => {
     function displaySelectedPartsList(){ const selectedSaleOrder = shortageSaleOrderSelect.value; const partsData = allPartsData[selectedSaleOrder]; populatePartsTable(partsData); }
     function populatePartsTable(partsData){ shortageTableBody.innerHTML = ''; if (!partsData || partsData.length === 0) { noShortageMessage.classList.remove('hidden'); shortageTableBody.parentElement.classList.add('hidden'); return; } noShortageMessage.classList.add('hidden'); shortageTableBody.parentElement.classList.remove('hidden'); partsData.forEach((item) => { const status = (item.availability_status || 'unknown').toLowerCase().replace(/\s+/g, '-'); const row = document.createElement('tr'); row.innerHTML = `<td>${item.part_number || 'N/A'}</td><td>${item.unitName || 'N/A'}</td><td>${item.requiredQuantity}</td><td>${item.currentStock}</td><td><span class="status-cell ${status}">${item.availability_status}</span></td>`; shortageTableBody.appendChild(row); }); }
     function downloadAllPartsExcel(){ if (!currentJigData) { showInfoModal('Error', 'Please search for a Jig Number first.', true); return; } window.open(`/api/download_all_parts_excel?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`, '_blank'); }
-    function clearForm(keepInput = false){ if (!keepInput) jigNumberInput.value = ''; jigDetailsDisplaySection.classList.add('hidden'); currentJigData = null; allPartsData = {}; closeSidebar(); jigNumberInput.focus(); }
-    function openSidebar(){ if (!currentJigData) return; sidebarJigNumber.textContent = currentJigData.tester_jig_number; docsSidebar.classList.add('open'); }
-    function closeSidebar(){ docsSidebar.classList.remove('open'); }
+    function clearForm(keepInput = false){ 
+        if (!keepInput) jigNumberInput.value = ''; 
+        jigDetailsDisplaySection.classList.add('hidden'); 
+        currentJigData = null; 
+        allPartsData = {}; 
+        closeSidebar(); // Ensure sidebar is closed on clear
+        jigNumberInput.focus(); 
+    }
+
+    // Modified openSidebar to only open on desktop or if explicitly called
+    function openSidebar(){ 
+        if (!currentJigData) return; 
+        sidebarJigNumber.textContent = currentJigData.tester_jig_number; 
+        docsSidebar.classList.add('open'); 
+        sidebarOverlay.classList.add('open'); // Show overlay
+    }
+
+    // Modified closeSidebar to also hide overlay
+    function closeSidebar(){ 
+        docsSidebar.classList.remove('open'); 
+        sidebarOverlay.classList.remove('open'); // Hide overlay
+    }
+
+    // New: Toggles the sidebar visibility
+    function toggleSidebar() {
+        if (docsSidebar.classList.contains('open')) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+    }
+
     function showLoading(show){ if (loadingSpinner) loadingSpinner.classList.toggle('hidden', !show); }
     function showModal(modal){ if (modal) modal.classList.remove('hidden'); }
     function hideModal(modal){ if (modal) modal.classList.add('hidden'); }
