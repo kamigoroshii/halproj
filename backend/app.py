@@ -7,6 +7,10 @@ import io
 import sys
 from dotenv import load_dotenv
 
+# NEW: Import Whoosh modules
+from whoosh.index import open_dir
+from whoosh.qparser import QueryParser
+
 load_dotenv()
 
 # --- Path Correction ---
@@ -25,6 +29,10 @@ CORS(app)
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 DATA_FILE = os.path.join(PROJECT_ROOT, 'data', 'processed_testers_data.csv')
+
+# NEW: Search Index Configuration
+SEARCH_INDEX_DIR = os.path.join(PROJECT_ROOT, 'search_index')
+SEARCH_INDEX_NAME = 'main' # This name MUST match what's in build_search_index.py
 
 # In-memory data store
 testers_data_by_jig_and_so = {}
@@ -45,7 +53,7 @@ def load_data():
                 df[col] = df[col].fillna('N/A')
         df[string_cols] = df[string_cols].astype(str)
 
-        numeric_cols = ['requiredQuantity', 'currentStock']
+        numeric_cols = ['requiredQuantity', 'currentStock', 'p_factor', 'recommendedQuantity']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
@@ -59,7 +67,7 @@ def load_data():
         print(f"Data loaded and sanitized successfully. {len(testers_data_by_jig_and_so)} unique jig numbers found.")
         
     except FileNotFoundError:
-        print(f"ERROR: Data file not found at {DATA_FILE}. The build script may have failed.")
+        print(f"ERROR: Data file not found at {DATA_FILE}. The build script may have failed. Please run transform_data.py")
     except Exception as e:
         print(f"An error occurred during data loading: {e}")
 
@@ -108,6 +116,114 @@ def get_all_parts_for_jig():
     all_parts = [part for parts_list in jig_data.values() for part in parts_list]
     return jsonify(all_parts)
 
+@app.route('/api/recommend_purchase', methods=['GET'])
+def recommend_purchase():
+    jig_number = request.args.get('jig_number')
+    sale_order = request.args.get('sale_order') 
+    
+    if not jig_number:
+        return jsonify({'message': 'Jig number is required for purchase recommendation.'}), 400
+
+    jig_data = testers_data_by_jig_and_so.get(jig_number)
+    if not jig_data:
+        return jsonify({'message': 'Jig not found.'}), 404
+
+    parts_to_process = []
+    if sale_order and sale_order in jig_data:
+        parts_to_process = jig_data[sale_order]
+    else:
+        for so_parts in jig_data.values():
+            parts_to_process.extend(so_parts)
+
+    recommended_parts = []
+    MIN_BUFFER = 5 
+
+    for part in parts_to_process:
+        req_qty = part.get('requiredQuantity', 0)
+        curr_stock = part.get('currentStock', 0)
+        p_factor = part.get('p_factor', 0) 
+
+        needed_qty = max(0, req_qty - curr_stock)
+        
+        recommended_qty = int(needed_qty * (1 + p_factor / 100)) + MIN_BUFFER
+        
+        recommended_qty = max(0, recommended_qty)
+
+        part_copy = part.copy() 
+        part_copy['recommendedQuantity'] = recommended_qty
+        recommended_parts.append(part_copy)
+    
+    return jsonify(recommended_parts)
+
+@app.route('/api/download_recommended_excel', methods=['GET'])
+def download_recommended_excel():
+    jig_number = request.args.get('jig_number')
+    sale_order = request.args.get('sale_order') 
+    
+    if not jig_number:
+        return jsonify({'message': 'Jig number is required for download.'}), 400
+
+    jig_data = testers_data_by_jig_and_so.get(jig_number)
+    if not jig_data:
+        return jsonify({'message': 'Jig not found.'}), 404
+
+    parts_to_process = []
+    if sale_order and sale_order in jig_data:
+        parts_to_process = jig_data[sale_order]
+    else:
+        for so_parts in jig_data.values():
+            parts_to_process.extend(so_parts)
+
+    # Perform the recommendation calculation for the Excel download
+    recommended_parts_for_excel = []
+    MIN_BUFFER = 5 
+
+    for part in parts_to_process:
+        req_qty = part.get('requiredQuantity', 0)
+        curr_stock = part.get('currentStock', 0)
+        p_factor = part.get('p_factor', 0)
+
+        needed_qty = max(0, req_qty - curr_stock)
+        recommended_qty = int(needed_qty * (1 + p_factor / 100)) + MIN_BUFFER
+        recommended_qty = max(0, recommended_qty)
+
+        part_copy = part.copy()
+        part_copy['recommendedQuantity'] = recommended_qty
+        recommended_parts_for_excel.append(part_copy)
+
+    df = pd.DataFrame(recommended_parts_for_excel)
+    
+    excel_cols_order = [
+        'tester_jig_number', 'sale_order', 'part_number', 'unitName', 
+        'requiredQuantity', 'currentStock', 'p_factor', 'recommendedQuantity', 
+        'availability_status', 'status' 
+    ]
+    
+    for col in excel_cols_order:
+        if col not in df.columns:
+            if col in ['requiredQuantity', 'currentStock', 'p_factor', 'recommendedQuantity']:
+                df[col] = 0
+            else:
+                df[col] = 'N/A'
+    df = df[excel_cols_order]
+
+    output = io.BytesIO()
+    df.to_excel(output, index=False, sheet_name='Recommended_Purchase')
+    output.seek(0)
+
+    filename = f'HAL_Recommended_Purchase_{jig_number}'
+    if sale_order:
+        filename += f'_{sale_order}'
+    filename += '.xlsx'
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        download_name=filename,
+        as_attachment=True
+    )
+
+
 @app.route('/api/download_all_parts_excel', methods=['GET'])
 def download_all_parts():
     tester_jig_number = request.args.get('jig_number')
@@ -120,8 +236,19 @@ def download_all_parts():
 
     all_parts = [part for so_parts in jig_data.values() for part in so_parts]
     df = pd.DataFrame(all_parts)
-    df = df[['tester_jig_number', 'sale_order', 'part_number', 'unitName', 'requiredQuantity', 'currentStock', 'availability_status', 'status']]
     
+    df_cols_order = ['tester_jig_number', 'sale_order', 'part_number', 'unitName', 
+                     'requiredQuantity', 'currentStock', 'availability_status', 
+                     'p_factor', 'recommendedQuantity', 'status', 'testerId', 'top_assy_no', 'officialIncharge']
+    
+    for col in df_cols_order:
+        if col not in df.columns:
+            if col in ['requiredQuantity', 'currentStock', 'p_factor', 'recommendedQuantity']:
+                df[col] = 0
+            else:
+                df[col] = 'N/A'
+    df = df[df_cols_order]
+
     output = io.BytesIO()
     df.to_excel(output, index=False, sheet_name='All_Parts_List')
     output.seek(0)
@@ -132,6 +259,42 @@ def download_all_parts():
         download_name=f'HAL_All_Parts_{tester_jig_number}.xlsx',
         as_attachment=True
     )
+
+# NEW: Search documentation endpoint
+@app.route('/api/search_docs', methods=['GET'])
+def search_documentation():
+    query_str = request.args.get('query', '')
+    if not query_str:
+        return jsonify({'message': 'Search query is required.'}), 400
+
+    results_list = []
+    # Ensure the search index directory exists before trying to open it
+    if not os.path.exists(SEARCH_INDEX_DIR):
+        print(f"Search documentation error: Index directory not found at {SEARCH_INDEX_DIR}. Please run build_search_index.py")
+        return jsonify({'message': 'Error: Search index not built.', 'error': 'Index directory missing.'}), 500
+
+    try:
+        # Open the named index
+        ix = open_dir(SEARCH_INDEX_DIR, indexname=SEARCH_INDEX_NAME)
+        with ix.searcher() as searcher:
+            query_parser = QueryParser("content", ix.schema)
+            query = query_parser.parse(query_str)
+            
+            results = searcher.search(query, limit=10) # Limit to 10 results for example
+
+            for hit in results:
+                results_list.append({
+                    'filename': hit['filename'],
+                    'page_num': hit['page_num'],
+                    'snippet': hit.highlights("content") 
+                })
+
+    except Exception as e:
+        print(f"Search documentation error: {e}")
+        # Return a more informative error for debugging
+        return jsonify({'message': 'Error performing search.', 'error': str(e)}), 500
+
+    return jsonify(results_list)
 
 @app.route('/api/send_telegram_alert', methods=['POST'])
 def send_telegram_alert_route():

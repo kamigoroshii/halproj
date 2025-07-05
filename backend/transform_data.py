@@ -28,6 +28,7 @@ OUTPUT_CSV = os.path.join(DATA_DIR, 'processed_testers_data.csv')
 def transform_data(input_configs, output_path):
     """
     Reads multiple Excel files and calculates the final status on the combined data.
+    Adds P-Factor and initial recommendedQuantity column.
     """
     print("Attempting to transform data from multiple sources.")
     print(f"Output will be saved to: {output_path}")
@@ -76,8 +77,12 @@ def transform_data(input_configs, output_path):
             ]
             choices = ['Not Applicable', 'Adequate', 'Shortage', 'Surplus']
             df['availability_status'] = np.select(conditions, choices, default='Unknown')
+            
+            # --- NEW: Add P-Factor and initial recommendedQuantity ---
+            # Assign a random P-Factor (e.g., 5-30%) for each part
+            df['p_factor'] = np.random.randint(5, 31, size=len(df)) # Random int between 5 and 30
+            df['recommendedQuantity'] = 0 # Initialize, calculated in app.py
 
-            # We will calculate the overall 'status' later, on the combined dataframe
             all_dfs.append(df)
 
         except FileNotFoundError:
@@ -103,7 +108,8 @@ def transform_data(input_configs, output_path):
 
     final_cols = [
         'testerId', 'tester_jig_number', 'sale_order', 'top_assy_no', 'part_number', 'unitName',
-        'requiredQuantity', 'currentStock', 'availability_status', 'officialIncharge', 'status'
+        'requiredQuantity', 'currentStock', 'availability_status', 'officialIncharge', 'status',
+        'p_factor', 'recommendedQuantity' # Include new columns
     ]
     for col in final_cols:
         if col not in final_combined_df.columns:

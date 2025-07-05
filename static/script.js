@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- All DOM Element Selections remain the same ---
+    // --- All DOM Element Selections ---
     const jigNumberInput = document.getElementById('jigNumberInput');
     const searchJigBtn = document.getElementById('searchJigBtn');
     const clearBtn = document.getElementById('clearBtn');
@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayLaunchingStatus = document.getElementById('displayLaunchingStatus');
     const statusIcon = document.getElementById('statusIcon');
     const shortageListBtn = document.getElementById('shortageListBtn');
-    const downloadAllPartsExcelBtn = document.getElementById('downloadAllPartsExcelBtn');
     const docsSidebar = document.getElementById('docsSidebar');
     const closeSidebarBtn = document.getElementById('closeSidebarBtn');
     const sidebarJigNumber = document.getElementById('sidebarJigNumber');
@@ -28,26 +27,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('themeToggle');
     const alertSentPopup = document.getElementById('alertSentPopup');
     const searchHistoryList = document.getElementById('searchHistory');
-    const documentationToggle = document.getElementById('documentationToggle'); // New: Documentation Toggle Button
-    const sidebarOverlay = document.getElementById('sidebarOverlay'); // New: Sidebar Overlay
-    const pageWrapper = document.getElementById('pageWrapper'); // New: Page Wrapper
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    
+    // Recommendation Elements
+    const recommendPurchaseBtn = document.getElementById('recommendPurchaseBtn');
+    const pFactorColHeader = document.querySelector('#shortageListModal .p-factor-col');
+    const recommendedQtyColHeader = document.querySelector('#shortageListModal .recommended-qty-col');
+
+    // Modal-specific download buttons
+    const downloadShortageExcelModalBtn = document.getElementById('downloadShortageExcelModalBtn');
+    const downloadRecommendedExcelModalBtn = document.getElementById('downloadRecommendedExcelModalBtn');
+
+    // Documentation Search Elements
+    const docSearchInput = document.getElementById('docSearchInput');
+    const docSearchResults = document.getElementById('docSearchResults');
+    const defaultDocLinks = document.getElementById('defaultDocLinks');
+
+    // NEW: Desktop Documentation Button
+    const documentationButton = document.getElementById('documentationButton');
+
 
     // --- State Management ---
     let currentJigData = null;
-    let allPartsData = {};
+    let allPartsData = {}; // Stores all parts for the current jig, including p_factor
+    let recommendedPartsData = {}; // Stores parts with recommended quantities after calculation
 
     // --- Initial Setup: Ensure sidebar is closed on page load ---
     closeSidebar(); 
 
-    // --- Event Listeners (All listeners remain the same, with additions for new elements) ---
+    // --- Event Listeners ---
     if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
     if (searchJigBtn) searchJigBtn.addEventListener('click', searchJigDetails);
     if (jigNumberInput) jigNumberInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') searchJigDetails();
     });
     if (clearBtn) clearBtn.addEventListener('click', () => clearForm());
-    if (shortageListBtn) shortageListBtn.addEventListener('click', openPartsListModal);
-    if (downloadAllPartsExcelBtn) downloadAllPartsExcelBtn.addEventListener('click', downloadAllPartsExcel);
+    
+    // Generate Shortage List button (now just opens modal in shortage mode)
+    if (shortageListBtn) shortageListBtn.addEventListener('click', () => openPartsListModal('shortage')); 
+    
     if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', closeSidebar);
     docLinks.forEach(link => {
         link.addEventListener('click', (e) => {
@@ -62,32 +81,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modalOkBtn) modalOkBtn.addEventListener('click', () => hideModal(alertModal));
     if (shortageSaleOrderSelect) shortageSaleOrderSelect.addEventListener('change', displaySelectedPartsList);
     
-    // New: Event listeners for documentation toggle and overlay
-    if (documentationToggle) documentationToggle.addEventListener('click', toggleSidebar);
-    if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar); // Close sidebar when overlay is clicked
+    if (menuToggle) menuToggle.addEventListener('click', toggleSidebar);
+    if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar); 
 
-    // --- Updated `openDocument` Function ---
+    // Event listeners for Recommendation and Download buttons
+    if (recommendPurchaseBtn) recommendPurchaseBtn.addEventListener('click', handleRecommendPurchase);
+    if (downloadShortageExcelModalBtn) downloadShortageExcelModalBtn.addEventListener('click', downloadShortageExcel); 
+    if (downloadRecommendedExcelModalBtn) downloadRecommendedExcelModalBtn.addEventListener('click', downloadRecommendedExcel); 
+
+    // Documentation Search Event Listener
+    if (docSearchInput) docSearchInput.addEventListener('input', searchDocumentation);
+
+    // NEW: Desktop Documentation Button Listener
+    if (documentationButton) documentationButton.addEventListener('click', openSidebar);
+
+
+    // --- Functions ---
+
     function openDocument(docType) {
         if (!currentJigData || !currentJigData.tester_jig_number) {
             showInfoModal('Error', 'No Tester Jig selected.', true);
             return;
         }
-        
         const jigNumber = currentJigData.tester_jig_number;
-        
-        // Dynamically construct the path to the PDF file
         const pdfUrl = `/static/docs/${jigNumber}_${docType}.pdf`;
-        
         console.log(`Attempting to open document at: ${pdfUrl}`);
-        
-        // Open the constructed URL in a new browser tab
         window.open(pdfUrl, '_blank');
-        
-        // Provide feedback to the user
         showToast(`Opening ${docType} document...`, 'info');
     }
-
-    // --- All other functions remain exactly the same ---
 
     async function searchJigDetails() {
         const jigNumber = jigNumberInput.value.trim().toUpperCase();
@@ -97,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         showLoading(true);
-        clearForm(true); // This will also close the sidebar
+        clearForm(true); 
         try {
             const response = await fetch(`/api/jig_details?jig_number=${encodeURIComponent(jigNumber)}`);
             if (!response.ok) {
@@ -122,16 +143,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             jigDetailsDisplaySection.classList.remove('hidden');
             jigDetailsDisplaySection.classList.add('fade-in');
-            await fetchAllPartsForJig();
             
-            // Update sidebar content after search, regardless of visibility
+            await fetchAllPartsForJig(); // Fetch all parts data, including P-Factor
+            
+            // Update sidebar content after search
             sidebarJigNumber.textContent = currentJigData.tester_jig_number;
 
-            // ON DESKTOP, OPEN SIDEBAR AUTOMATICALLY AFTER SEARCH
-            // On mobile, the user needs to click the documentation toggle.
-            if (window.innerWidth >= 768) { // Assuming 768px is your tablet/desktop breakpoint
-                openSidebar(); 
-            }
+            // REMOVED: Automatic openSidebar() call for desktop after search.
+            // Now, users click the dedicated 'Documentation' button to open it.
 
             if (isNotLaunched) {
                 await sendTelegramAlert();
@@ -144,9 +163,10 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoading(false);
         }
     }
+
     async function sendTelegramAlert() {
-        if (!currentJigData) return;
-        const jigNumber = currentJigData.tester_jig_number;
+        if (!currentJigData) return; 
+        const jigNumber = currentJigData.tester_jig_number; 
         const status = currentJigData.status;
         let shortageCount = 0;
         if (allPartsData) {
@@ -169,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showInfoModal('Telegram Error', `Automatic alert failed. Reason: ${error.message}`, true);
         }
     }
+
     function loadSearchHistory() {
         if (!searchHistoryList) return;
         const history = JSON.parse(localStorage.getItem('jigSearchHistory')) || [];
@@ -199,46 +220,222 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 500);
         }, 1500);
     }
-    async function fetchAllPartsForJig(){ if (!currentJigData) return; allPartsData = {}; try { const response = await fetch(`/api/all_parts_for_jig?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`); if (!response.ok) throw new Error('Server responded with an error fetching parts.'); const allParts = await response.json(); currentJigData.sale_orders.forEach(so => { allPartsData[so] = allParts.filter(p => p.sale_order === so); }); } catch (error) { console.error("Could not pre-fetch parts data:", error); } }
-    function openPartsListModal(){ if (!currentJigData) return; shortageSaleOrderSelect.innerHTML = currentJigData.sale_orders.map(so => `<option value="${so}">${so}</option>`).join(''); displaySelectedPartsList(); showModal(shortageListModal); }
-    function displaySelectedPartsList(){ const selectedSaleOrder = shortageSaleOrderSelect.value; const partsData = allPartsData[selectedSaleOrder]; populatePartsTable(partsData); }
-    function populatePartsTable(partsData){ shortageTableBody.innerHTML = ''; if (!partsData || partsData.length === 0) { noShortageMessage.classList.remove('hidden'); shortageTableBody.parentElement.classList.add('hidden'); return; } noShortageMessage.classList.add('hidden'); shortageTableBody.parentElement.classList.remove('hidden'); partsData.forEach((item) => { const status = (item.availability_status || 'unknown').toLowerCase().replace(/\s+/g, '-'); const row = document.createElement('tr'); row.innerHTML = `<td>${item.part_number || 'N/A'}</td><td>${item.unitName || 'N/A'}</td><td>${item.requiredQuantity}</td><td>${item.currentStock}</td><td><span class="status-cell ${status}">${item.availability_status}</span></td>`; shortageTableBody.appendChild(row); }); }
-    function downloadAllPartsExcel(){ if (!currentJigData) { showInfoModal('Error', 'Please search for a Jig Number first.', true); return; } window.open(`/api/download_all_parts_excel?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`, '_blank'); }
+    
+    // Fetches ALL parts data for the jig, stores it in allPartsData
+    async function fetchAllPartsForJig(){ 
+        if (!currentJigData) return; 
+        allPartsData = {}; // Clear previous data
+        recommendedPartsData = {}; // Clear previous recommendations
+
+        try { 
+            const response = await fetch(`/api/all_parts_for_jig?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`); 
+            if (!response.ok) throw new Error('Server responded with an error fetching parts.'); 
+            const allParts = await response.json(); 
+            
+            // Group by sale order and store in allPartsData
+            currentJigData.sale_orders.forEach(so => { 
+                allPartsData[so] = allParts.filter(p => p.sale_order === so); 
+            });
+            console.log("All parts data fetched:", allPartsData);
+
+        } catch (error) { 
+            console.error("Could not pre-fetch parts data:", error); 
+            showInfoModal('Data Error', 'Failed to load all parts data for this jig.', true);
+        } 
+    }
+
+    // Handler for "Recommend Purchase" button click
+    async function handleRecommendPurchase() {
+        if (!currentJigData) {
+            showInfoModal('Error', 'Please search for a Jig Number first.', true);
+            return;
+        }
+
+        showLoading(true);
+        try {
+            const response = await fetch(`/api/recommend_purchase?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to get purchase recommendations.');
+            }
+            const partsWithRecommendations = await response.json();
+            
+            // Store recommended data, grouped by sale order
+            recommendedPartsData = {};
+            currentJigData.sale_orders.forEach(so => {
+                recommendedPartsData[so] = partsWithRecommendations.filter(p => p.sale_order === so);
+            });
+            console.log("Recommended parts data:", recommendedPartsData);
+
+            // Open the modal and display recommendations
+            openPartsListModal('recommendation');
+
+        } catch (error) {
+            console.error('Error fetching purchase recommendations:', error);
+            showInfoModal('Recommendation Failed', `Could not generate purchase recommendations. Reason: ${error.message}`, true);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Download Shortage List Excel (now linked to button INSIDE modal)
+    function downloadShortageExcel(){ 
+        if (!currentJigData) { 
+            showInfoModal('Error', 'Please search for a Jig Number first.', true); 
+            return; 
+        } 
+        window.open(`/api/download_all_parts_excel?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`, '_blank'); 
+    }
+
+    // Download Recommended Excel (now linked to button INSIDE modal)
+    function downloadRecommendedExcel() {
+        if (!currentJigData) {
+            showInfoModal('Error', 'Please search for a Jig Number first to download recommendations.', true);
+            return;
+        }
+        window.open(`/api/download_recommended_excel?jig_number=${encodeURIComponent(currentJigData.tester_jig_number)}`, '_blank');
+    }
+
+    // Modified to accept a 'mode' to display either shortage or recommendation
+    function openPartsListModal(mode = 'shortage'){ 
+        if (!currentJigData) {
+            showInfoModal('Error', 'Please search for a Jig Number first.', true);
+            return;
+        }
+        
+        // Populate Sale Order dropdown
+        shortageSaleOrderSelect.innerHTML = currentJigData.sale_orders.map(so => `<option value="${so}">${so}</option>`).join(''); 
+        
+        // Determine which data source to use and which columns to show
+        let dataToDisplay = allPartsData;
+        let modalTitle = 'Shortage List';
+        let showPFactorAndRecommended = false;
+
+        if (mode === 'recommendation') {
+            dataToDisplay = recommendedPartsData;
+            modalTitle = 'Recommended Purchase List';
+            showPFactorAndRecommended = true;
+            // Show only the recommended excel download button
+            downloadRecommendedExcelModalBtn.classList.remove('hidden');
+            downloadShortageExcelModalBtn.classList.add('hidden');
+        } else { // default to shortage
+             modalTitle = 'Shortage List';
+             // If a jig has no shortages, and we're showing 'shortage' mode, filter
+             // to show only shortage items OR all items if no shortages exist
+             const hasShortages = Object.values(allPartsData).flat().some(p => p.availability_status === 'Shortage');
+             if (hasShortages) {
+                // Filter to show only shortage items
+                let filteredData = {};
+                for (const so in allPartsData) {
+                    filteredData[so] = allPartsData[so].filter(p => p.availability_status === 'Shortage');
+                }
+                dataToDisplay = filteredData;
+             } else {
+                 // If no shortages, show all parts in the 'shortage' view, but keep original title
+                 dataToDisplay = allPartsData;
+             }
+             // Show only the shortage excel download button
+             downloadRecommendedExcelModalBtn.classList.add('hidden');
+             downloadShortageExcelModalBtn.classList.remove('hidden');
+        }
+
+        // Update modal title
+        document.querySelector('#shortageListModal .modal-header h3').textContent = modalTitle;
+
+        // Toggle P-Factor and Recommended Qty columns visibility
+        if (pFactorColHeader && recommendedQtyColHeader) {
+            if (showPFactorAndRecommended) {
+                pFactorColHeader.classList.remove('hidden');
+                recommendedQtyColHeader.classList.remove('hidden');
+            } else {
+                pFactorColHeader.classList.add('hidden');
+                recommendedQtyColHeader.classList.add('hidden');
+            }
+        }
+
+        // Store the current data mode in the select element itself or a global variable
+        // for `displaySelectedPartsList` to pick up.
+        shortageSaleOrderSelect.dataset.currentMode = mode;
+
+        displaySelectedPartsList(); // Display for the initially selected SO
+        showModal(shortageListModal);
+    }
+
+    // Modified to use the correct data source based on currentMode
+    function displaySelectedPartsList(){ 
+        const selectedSaleOrder = shortageSaleOrderSelect.value;
+        const currentMode = shortageSaleOrderSelect.dataset.currentMode || 'shortage'; // Get the mode
+        
+        let partsData = [];
+        if (currentMode === 'recommendation') {
+            partsData = recommendedPartsData[selectedSaleOrder] || [];
+        } else {
+            // In 'shortage' mode, filter for 'Shortage' unless there are no shortages at all, then show all.
+            const allPartsForSO = allPartsData[selectedSaleOrder] || [];
+            const hasShortagesInSO = allPartsForSO.some(p => p.availability_status === 'Shortage');
+
+            if (hasShortagesInSO) {
+                partsData = allPartsForSO.filter(p => p.availability_status === 'Shortage');
+            } else {
+                // If no shortages for this SO, show all parts for completeness in shortage view
+                partsData = allPartsForSO;
+            }
+        }
+        populatePartsTable(partsData, currentMode === 'recommendation'); 
+    }
+
+    // Modified to conditionally display P-Factor and Recommended Quantity
+    function populatePartsTable(partsData, showRecommendationColumns){ 
+        shortageTableBody.innerHTML = ''; 
+        if (!partsData || partsData.length === 0) { 
+            noShortageMessage.classList.remove('hidden'); 
+            shortageTableBody.parentElement.classList.add('hidden'); 
+            return; 
+        } 
+        noShortageMessage.classList.add('hidden'); 
+        shortageTableBody.parentElement.classList.remove('hidden'); 
+        
+        partsData.forEach((item) => { 
+            const status = (item.availability_status || 'unknown').toLowerCase().replace(/\s+/g, '-'); 
+            const row = document.createElement('tr'); 
+            row.innerHTML = `
+                <td>${item.part_number || 'N/A'}</td>
+                <td>${item.unitName || 'N/A'}</td>
+                <td>${item.requiredQuantity}</td>
+                <td>${item.currentStock}</td>
+                <td class="p-factor-cell ${showRecommendationColumns ? '' : 'hidden'}">${item.p_factor || 0}%</td>
+                <td class="recommended-qty-cell ${showRecommendationColumns ? '' : 'hidden'}">${item.recommendedQuantity || 0}</td>
+                <td><span class="status-cell ${status}">${item.availability_status}</span></td>
+            `;
+            shortageTableBody.appendChild(row); 
+        }); 
+    }
+
     function clearForm(keepInput = false){ 
         if (!keepInput) jigNumberInput.value = ''; 
         jigDetailsDisplaySection.classList.add('hidden'); 
         currentJigData = null; 
         allPartsData = {}; 
-        closeSidebar(); // Ensure sidebar is closed on clear
+        recommendedPartsData = {}; // Clear recommendations on form clear
+        closeSidebar(); 
         jigNumberInput.focus(); 
     }
 
-    // Modified openSidebar - Documentation can be opened anytime now
     function openSidebar(){ 
-        // Update sidebar content if jig data exists
-        if (currentJigData) {
-            sidebarJigNumber.textContent = currentJigData.tester_jig_number;
-        } else {
-            sidebarJigNumber.textContent = 'Please search for a jig first';
+        if (!currentJigData) {
+            showInfoModal('Information', 'Please search for a Tester Jig first to view documentation.', false);
+            return;
         }
-        
+        sidebarJigNumber.textContent = currentJigData.tester_jig_number; 
         docsSidebar.classList.add('open'); 
-        sidebarOverlay.classList.add('open'); // Show overlay
-        
-        // Add class to page wrapper for desktop slide effect
-        if (window.innerWidth >= 768) {
-            pageWrapper.classList.add('sidebar-open');
-        }
+        sidebarOverlay.classList.add('open'); 
     }
 
-    // Modified closeSidebar to also hide overlay
     function closeSidebar(){ 
         docsSidebar.classList.remove('open'); 
-        sidebarOverlay.classList.remove('open'); // Hide overlay
-        pageWrapper.classList.remove('sidebar-open'); // Remove desktop slide effect
+        sidebarOverlay.classList.remove('open'); 
     }
 
-    // Toggles the sidebar visibility
     function toggleSidebar() {
         if (docsSidebar.classList.contains('open')) {
             closeSidebar();
@@ -250,25 +447,92 @@ document.addEventListener('DOMContentLoaded', () => {
     function showLoading(show){ if (loadingSpinner) loadingSpinner.classList.toggle('hidden', !show); }
     function showModal(modal){ if (modal) modal.classList.remove('hidden'); }
     function hideModal(modal){ if (modal) modal.classList.add('hidden'); }
-    function showInfoModal(title, message, isError = false){ const modalTitleEl = document.getElementById('modalTitle'); const modalMessageEl = document.getElementById('modalMessage'); if (modalTitleEl) modalTitleEl.textContent = title; if (modalMessageEl) modalMessageEl.textContent = message; if (modalTitleEl) modalTitleEl.style.color = isError ? 'var(--danger)' : ''; if (alertModal) showModal(alertModal); }
-    function toggleTheme(){ const currentTheme = document.documentElement.getAttribute('data-theme'); const newTheme = currentTheme === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', newTheme); }
-    function showToast(message, type, duration) {
-        // Simple toast implementation for feedback
-        console.log(`Toast: ${message} (${type})`);
+    function showInfoModal(title, message, isError = false){ 
+        const modalTitleEl = document.getElementById('modalTitle'); 
+        const modalMessageEl = document.getElementById('modalMessage'); 
+        if (modalTitleEl) modalTitleEl.textContent = title; 
+        if (modalMessageEl) modalMessageEl.textContent = message; 
+        if (modalTitleEl) modalTitleEl.style.color = isError ? 'var(--danger-red)' : ''; 
+        if (alertModal) showModal(alertModal); 
+    }
+    function toggleTheme(){ 
+        const currentTheme = document.documentElement.getAttribute('data-theme'); 
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark'; 
+        document.documentElement.setAttribute('data-theme', newTheme); 
+    }
+    // Dummy functions for toast (if not fully implemented in style.css or elsewhere)
+    function initializeTheme(){}
+    function showToast(message, type, duration = 2000) {
+        const toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast-notification ${type}`;
+        toast.textContent = message;
+
+        toastContainer.appendChild(toast);
+
+        // Animate in
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+
+        // Animate out and remove
+        setTimeout(() => {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove());
+        }, duration);
     }
     
-    // Handle window resize to manage sidebar behavior
-    window.addEventListener('resize', () => {
-        if (window.innerWidth >= 768) {
-            // Desktop: Remove mobile-specific classes
-            if (docsSidebar.classList.contains('open')) {
-                pageWrapper.classList.add('sidebar-open');
-            }
-        } else {
-            // Mobile: Remove desktop-specific classes
-            pageWrapper.classList.remove('sidebar-open');
+    // Documentation Search Function
+    async function searchDocumentation() {
+        const query = docSearchInput.value.trim();
+        docSearchResults.innerHTML = ''; // Clear previous results
+
+        if (query.length < 3) { // Only search for queries 3+ characters
+            docSearchResults.classList.add('hidden'); // Hide results if query is too short
+            if (defaultDocLinks) defaultDocLinks.classList.remove('hidden'); // Show default links
+            return;
         }
-    });
+
+        showLoading(true); // Assuming showLoading is global
+        if (defaultDocLinks) defaultDocLinks.classList.add('hidden'); // Hide default links when searching
+        docSearchResults.classList.remove('hidden');
+
+        try {
+            const response = await fetch(`/api/search_docs?query=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Error: ${response.status}`);
+            }
+            const results = await response.json();
+
+            if (results.length === 0) {
+                docSearchResults.innerHTML = '<li class="no-results">No results found.</li>';
+            } else {
+                const ul = document.createElement('ul');
+                ul.classList.add('search-results-list');
+                results.forEach(result => {
+                    const li = document.createElement('li');
+                    // Link to PDF page: /static/docs/<filename>#page=<page_num>
+                    const pdfLink = `/static/docs/${result.filename}#page=${result.page_num}`;
+                    li.innerHTML = `
+                        <a href="${pdfLink}" target="_blank" class="search-result-link">
+                            <span class="search-result-title">${result.filename} (Page ${result.page_num})</span>
+                            <span class="search-result-snippet">${result.snippet || '...'}</span>
+                        </a>
+                    `;
+                    ul.appendChild(li);
+                });
+                docSearchResults.appendChild(ul);
+            }
+        } catch (error) {
+            console.error('Error during documentation search:', error);
+            docSearchResults.innerHTML = `<li class="error-results">Error: ${error.message}</li>`;
+        } finally {
+            showLoading(false);
+        }
+    }
     
     loadSearchHistory();
 });
