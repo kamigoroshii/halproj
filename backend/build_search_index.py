@@ -5,13 +5,9 @@ from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser # This import isn't strictly needed here but harmless
 import fitz  # PyMuPDF
 
-# --- Configuration ---
-# PROJECT_ROOT needs to be adjusted if this script is run from project root, not backend/
-# If backend/build_search_index.py is run directly, os.path.abspath(__file__) points to it.
-# os.path.dirname(__file__) is backend/.
-# os.path.dirname(os.path.dirname(__file__)) is the project root.
+
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(CURRENT_DIR) # Assumes backend/build_search_index.py is one level below project root
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
 
 DOCS_DIR = os.path.join(PROJECT_ROOT, 'static', 'docs')
 INDEX_DIR = os.path.join(PROJECT_ROOT, 'search_index') 
